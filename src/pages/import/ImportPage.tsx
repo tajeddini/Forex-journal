@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getAccounts } from '../../services/accounts';
@@ -9,6 +9,7 @@ import type { TradingAccount, AccountPhase, TradeSource, TradeInsert } from '../
 import { parseCSV, validateCSVFile, readFileAsText, detectDelimiter } from '../../utils/csv-parser';
 import { mapColumns, normalizeTradeRow, detectTradeSource, type NormalizedTrade } from '../../utils/trade-normalizer';
 import { findDuplicates } from '../../utils/duplicate-detector';
+import { aggregateMT5Deals, type MT5Deal } from '../../utils/mt5-aggregation';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
@@ -67,14 +68,14 @@ export default function ImportPage() {
   });
 
   // Load accounts
-  useState(() => {
+  useEffect(() => {
     if (user) {
       getAccounts(user.id)
         .then(setAccounts)
         .catch(() => toast.error('خطا در دریافت حساب‌ها'))
         .finally(() => setLoading(false));
     }
-  });
+  }, [user, toast]);
 
   // Load phases when account changes
   const handleAccountChange = useCallback(async (accountId: string) => {
@@ -141,58 +142,44 @@ export default function ImportPage() {
     let finalTrades = normalizedTrades;
     if (state.source === 'mt5' && normalizedTrades.length > 0) {
       try {
-        // Import MT5 aggregation dynamically to avoid circular dependencies
-        import('../../utils/mt5-aggregation').then(({ aggregateMT5Deals }) => {
-          // Convert NormalizedTrade to MT5Deal format
-          const mt5Deals = normalizedTrades.map(t => ({
-            ticket: t.ticket || undefined,
-            position_id: t.position_id || undefined,
-            symbol: t.symbol,
-            side: t.side,
-            volume: t.volume,
-            price: t.entry_price,
-            datetime: t.entry_datetime,
-            commission: t.commission || 0,
-            swap: t.swap || 0,
-            profit: t.profit || 0,
-            type: 'deal' as const,
-            comment: t.comment || undefined,
-            magic_number: t.magic_number || undefined,
-          }));
+        const mt5Deals: MT5Deal[] = normalizedTrades.map(t => ({
+          ticket: t.ticket || undefined,
+          position_id: t.position_id || undefined,
+          symbol: t.symbol,
+          side: t.side,
+          volume: t.volume,
+          price: t.entry_price,
+          datetime: t.entry_datetime,
+          commission: t.commission || 0,
+          swap: t.swap || 0,
+          profit: t.profit || 0,
+          type: 'deal',
+          comment: t.comment || undefined,
+          magic_number: t.magic_number ? Number(t.magic_number) : undefined,
+        }));
 
-          const aggregated = aggregateMT5Deals(mt5Deals);
-          
-          // Convert back to NormalizedTrade format
-          finalTrades = aggregated.map((pos: any) => ({
-            ticket: pos.ticket,
-            position_id: pos.position_id,
-            symbol: pos.symbol,
-            side: pos.side,
-            volume: pos.total_volume,
-            entry_datetime: pos.entry_datetime,
-            entry_price: pos.weighted_entry_price,
-            stop_loss: null,
-            take_profit: null,
-            exit_datetime: pos.exit_datetime,
-            exit_price: pos.weighted_exit_price,
-            commission: pos.total_commission,
-            swap: pos.total_swap,
-            profit: pos.total_profit,
-            comment: pos.deals?.[0]?.comment || null,
-            magic_number: pos.deals?.[0]?.magic_number || null,
-          }));
-
-          setState(prev => ({
-            ...prev,
-            step: 'preview',
-            normalizedTrades: finalTrades,
-            invalidRows,
-          }));
-        });
-        return; // Early return, setState will be called in .then()
+        const aggregated = aggregateMT5Deals(mt5Deals);
+        
+        finalTrades = aggregated.map((pos: any) => ({
+          ticket: pos.ticket,
+          position_id: pos.position_id,
+          symbol: pos.symbol,
+          side: pos.side,
+          volume: pos.total_volume,
+          entry_datetime: pos.entry_datetime,
+          entry_price: pos.weighted_entry_price,
+          stop_loss: null,
+          take_profit: null,
+          exit_datetime: pos.exit_datetime,
+          exit_price: pos.weighted_exit_price,
+          commission: pos.total_commission,
+          swap: pos.total_swap,
+          profit: pos.total_profit,
+          comment: pos.deals?.[0]?.comment || null,
+          magic_number: pos.deals?.[0]?.magic_number || null,
+        }));
       } catch (err) {
-        console.error('MT5 aggregation failed, using raw trades:', err);
-        // Fall back to raw trades if aggregation fails
+        console.warn('MT5 aggregation failed, using raw trades:', err);
       }
     }
 

@@ -1,31 +1,59 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
 import { LoadingPage } from './components/ui/Loading';
+import { RouteErrorFallback } from './components/RouteErrorFallback';
 import AppLayout from './components/layout/AppLayout';
 
-// Lazy-loaded pages
-const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
-const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
-const GuestLoginPage = lazy(() => import('./pages/auth/GuestLoginPage'));
-const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage'));
-const AccountsPage = lazy(() => import('./pages/accounts/AccountsPage'));
-const AccountDetailPage = lazy(() => import('./pages/accounts/AccountDetailPage'));
-const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
-const ImportPage = lazy(() => import('./pages/import/ImportPage'));
-const TradesPage = lazy(() => import('./pages/trades/TradesPage'));
-const TradeDetailPage = lazy(() => import('./pages/trades/TradeDetailPage'));
-const AnalyticsPage = lazy(() => import('./pages/analytics/AnalyticsPage'));
-const WhatIfPage = lazy(() => import('./pages/analytics/WhatIfPage'));
-const CalendarPage = lazy(() => import('./pages/calendar/CalendarPage'));
-const ReviewsPage = lazy(() => import('./pages/reviews/ReviewsPage'));
-const CustomDashboardPage = lazy(() => import('./pages/dashboard/CustomDashboardPage'));
-const StrategiesPage = lazy(() => import('./pages/settings/StrategiesPage'));
-const SetupsPage = lazy(() => import('./pages/settings/SetupsPage'));
-const TagsPage = lazy(() => import('./pages/settings/TagsPage'));
-const MistakesPage = lazy(() => import('./pages/settings/MistakesPage'));
-const JournalPage = lazy(() => import('./pages/journal/JournalPage'));
-const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
+// Resilient dynamic module loader with auto-retry and cache-bust recovery
+function lazyWithRetry<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (error) {
+      console.warn('Dynamic chunk import failed, attempting retry...', error);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return await factory();
+      } catch (retryError) {
+        const key = 'chunk_reload_attempt';
+        const hasReloaded = sessionStorage.getItem(key);
+        if (!hasReloaded) {
+          sessionStorage.setItem(key, 'true');
+          window.location.reload();
+          return new Promise<{ default: T }>(() => {});
+        }
+        sessionStorage.removeItem(key);
+        throw retryError;
+      }
+    }
+  });
+}
+
+// Lazy-loaded pages with resilient loading
+const LoginPage = lazyWithRetry(() => import('./pages/auth/LoginPage'));
+const RegisterPage = lazyWithRetry(() => import('./pages/auth/RegisterPage'));
+const GuestLoginPage = lazyWithRetry(() => import('./pages/auth/GuestLoginPage'));
+const DashboardPage = lazyWithRetry(() => import('./pages/dashboard/DashboardPage'));
+const AccountsPage = lazyWithRetry(() => import('./pages/accounts/AccountsPage'));
+const AccountDetailPage = lazyWithRetry(() => import('./pages/accounts/AccountDetailPage'));
+const PlaceholderPage = lazyWithRetry(() => import('./pages/PlaceholderPage'));
+const ImportPage = lazyWithRetry(() => import('./pages/import/ImportPage'));
+const TradesPage = lazyWithRetry(() => import('./pages/trades/TradesPage'));
+const TradeDetailPage = lazyWithRetry(() => import('./pages/trades/TradeDetailPage'));
+const AnalyticsPage = lazyWithRetry(() => import('./pages/analytics/AnalyticsPage'));
+const WhatIfPage = lazyWithRetry(() => import('./pages/analytics/WhatIfPage'));
+const CalendarPage = lazyWithRetry(() => import('./pages/calendar/CalendarPage'));
+const ReviewsPage = lazyWithRetry(() => import('./pages/reviews/ReviewsPage'));
+const CustomDashboardPage = lazyWithRetry(() => import('./pages/dashboard/CustomDashboardPage'));
+const StrategiesPage = lazyWithRetry(() => import('./pages/settings/StrategiesPage'));
+const SetupsPage = lazyWithRetry(() => import('./pages/settings/SetupsPage'));
+const TagsPage = lazyWithRetry(() => import('./pages/settings/TagsPage'));
+const MistakesPage = lazyWithRetry(() => import('./pages/settings/MistakesPage'));
+const JournalPage = lazyWithRetry(() => import('./pages/journal/JournalPage'));
+const SettingsPage = lazyWithRetry(() => import('./pages/settings/SettingsPage'));
 
 function SuspenseWrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -39,6 +67,7 @@ const router = createBrowserRouter([
   // Public routes
   {
     path: '/login',
+    errorElement: <RouteErrorFallback />,
     element: (
       <PublicRoute>
         <SuspenseWrapper>
@@ -49,6 +78,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/register',
+    errorElement: <RouteErrorFallback />,
     element: (
       <PublicRoute>
         <SuspenseWrapper>
@@ -59,6 +89,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/guest',
+    errorElement: <RouteErrorFallback />,
     element: (
       <PublicRoute>
         <SuspenseWrapper>
@@ -71,6 +102,7 @@ const router = createBrowserRouter([
   // Protected routes
   {
     path: '/app',
+    errorElement: <RouteErrorFallback />,
     element: (
       <ProtectedRoute>
         <SuspenseWrapper>
@@ -132,6 +164,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: 'import',
+        element: (
+          <SuspenseWrapper>
+            <ImportPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
         path: 'analytics',
         element: (
           <SuspenseWrapper>
@@ -160,14 +200,6 @@ const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <ReviewsPage />
-          </SuspenseWrapper>
-        ),
-      },
-      {
-        path: 'import',
-        element: (
-          <SuspenseWrapper>
-            <ImportPage />
           </SuspenseWrapper>
         ),
       },
@@ -214,13 +246,7 @@ const router = createBrowserRouter([
     ],
   },
 
-  // Root redirect
-  {
-    path: '/',
-    element: <Navigate to="/app/dashboard" replace />,
-  },
-
-  // Catch-all
+  // Fallback route
   {
     path: '*',
     element: <Navigate to="/app/dashboard" replace />,
