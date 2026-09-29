@@ -9,7 +9,7 @@ import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/ui/Loading';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { ErrorState } from '../../components/ui/ErrorState';
+import { StatusNotice } from '../../components/ui/StatusNotice';
 import { formatDateTime, formatDuration, getJournalStatusLabel } from '../../utils/format';
 import { TRADE_SIDES } from '../../types/database';
 import { Link } from 'react-router-dom';
@@ -84,7 +84,7 @@ export default function TradesPage() {
   }
 
   if (error) {
-    return <ErrorState message={error} retry={fetchTrades} />;
+    return <StatusNotice message={error} retry={fetchTrades} />;
   }
 
   return (

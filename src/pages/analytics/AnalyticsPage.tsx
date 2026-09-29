@@ -9,7 +9,7 @@ import type { AnalyticsFilters, AnalyticsResult } from '../../services/analytics
 import { Card, CardTitle, CardHeader } from '../../components/ui/Card';
 import { Select } from '../../components/ui/Select';
 import { Loading } from '../../components/ui/Loading';
-import { ErrorState } from '../../components/ui/ErrorState';
+import { StatusNotice } from '../../components/ui/StatusNotice';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { formatCurrency, formatNumber, formatDuration } from '../../utils/format';
 import type { TradingAccount } from '../../types/database';
@@ -47,7 +47,7 @@ export default function AnalyticsPage() {
   }, [user, filters]);
 
   if (loading) return <Loading message="در حال محاسبه آنالیتیکس..." />;
-  if (error) return <ErrorState message={error} retry={() => window.location.reload()} />;
+  if (error) return <StatusNotice message={error} retry={() => window.location.reload()} />;
   if (!analytics) return null;
 
   const hasTrades = analytics.trades.length > 0;

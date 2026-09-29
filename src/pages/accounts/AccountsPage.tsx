@@ -11,7 +11,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/ui/Loading';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { ErrorState } from '../../components/ui/ErrorState';
+import { StatusNotice } from '../../components/ui/StatusNotice';
 
 export default function AccountsPage() {
   const { user } = useAuth();
@@ -142,7 +142,7 @@ export default function AccountsPage() {
   }
 
   if (error) {
-    return <ErrorState message={error} retry={() => window.location.reload()} />;
+    return <StatusNotice message={error} retry={() => window.location.reload()} />;
   }
 
   return (

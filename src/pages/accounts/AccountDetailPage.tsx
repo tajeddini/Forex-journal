@@ -12,7 +12,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { Loading } from '../../components/ui/Loading';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { ErrorState } from '../../components/ui/ErrorState';
+import { StatusNotice } from '../../components/ui/StatusNotice';
 import { AccountForm, type AccountFormData } from '../../components/accounts/AccountForm';
 import { PhaseForm, type PhaseFormData } from '../../components/account-phases/PhaseForm';
 import { PhaseCard } from '../../components/account-phases/PhaseCard';
@@ -185,7 +185,7 @@ export default function AccountDetailPage() {
 
   if (error || !account) {
     return (
-      <ErrorState
+      <StatusNotice
         message={error || 'حساب مورد نظر یافت نشد'}
         retry={() => navigate('/app/accounts')}
       />

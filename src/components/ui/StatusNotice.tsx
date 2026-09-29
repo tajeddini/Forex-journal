@@ -1,14 +1,14 @@
 import { type ReactNode } from 'react';
 import { Button } from './Button';
 
-interface ErrorStateProps {
+interface StatusNoticeProps {
   title?: string;
   message: string;
   retry?: () => void;
   icon?: ReactNode;
 }
 
-export function ErrorState({ title = 'خطا', message, retry, icon }: ErrorStateProps) {
+export function StatusNotice({ title = 'پیام سیستم', message, retry, icon }: StatusNoticeProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
       {icon ? (

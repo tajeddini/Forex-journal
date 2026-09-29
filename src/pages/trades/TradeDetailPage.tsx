@@ -16,7 +16,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Loading } from '../../components/ui/Loading';
-import { ErrorState } from '../../components/ui/ErrorState';
+import { StatusNotice } from '../../components/ui/StatusNotice';
 import { formatCurrency, formatDateTime, formatDuration, getJournalStatusLabel, getRuleAdherenceLabel } from '../../utils/format';
 import { VoiceInput } from '../../components/journal/VoiceInput';
 import { TradeImageUpload } from '../../components/trades/TradeImageUpload';
@@ -199,7 +199,7 @@ export default function TradeDetailPage() {
   };
 
   if (loading) return <Loading message="در حال بارگذاری..." />;
-  if (error || !trade) return <ErrorState message={error || 'معامله یافت نشد'} retry={() => navigate('/app/trades')} />;
+  if (error || !trade) return <StatusNotice message={error || 'معامله یافت نشد'} retry={() => navigate('/app/trades')} />;
 
   return (
     <div className="space-y-6">
