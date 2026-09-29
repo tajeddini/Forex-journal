@@ -3,68 +3,94 @@
 // Daily, Weekly, Monthly reviews
 // ============================================================
 
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
+import { MockStorage } from './mockStorage';
 import type { TradingReview, TradingReviewInsert, TradingReviewUpdate, ReviewType } from '../types/database';
 
 /**
  * Get all reviews for a user
  */
 export async function getReviews(userId: string, type?: ReviewType): Promise<TradingReview[]> {
-  let query = supabase
-    .from('trading_reviews')
-    .select('*')
-    .eq('user_id', userId)
-    .order('review_date', { ascending: false });
-  
-  if (type) {
-    query = query.eq('review_type', type);
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.getReviews(userId, type);
   }
-  
-  const { data, error } = await query;
-  
-  if (error) {
-    console.error('Error fetching reviews:', error);
-    throw new Error('خطا در دریافت بازبینی‌ها');
+
+  try {
+    let query = supabase
+      .from('trading_reviews')
+      .select('*')
+      .eq('user_id', userId)
+      .order('review_date', { ascending: false });
+    
+    if (type) {
+      query = query.eq('review_type', type);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.warn('Falling back to local reviews storage due to Supabase error:', error.message);
+      return MockStorage.getReviews(userId, type);
+    }
+    
+    return data || [];
+  } catch (err) {
+    console.warn('Failed to query Supabase reviews, using local storage fallback:', err);
+    return MockStorage.getReviews(userId, type);
   }
-  
-  return data || [];
 }
 
 /**
  * Get a specific review
  */
 export async function getReview(reviewId: string, userId: string): Promise<TradingReview | null> {
-  const { data, error } = await supabase
-    .from('trading_reviews')
-    .select('*')
-    .eq('id', reviewId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  
-  if (error) {
-    console.error('Error fetching review:', error);
-    throw new Error('خطا در دریافت بازبینی');
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.getReview(reviewId, userId);
   }
-  
-  return data;
+
+  try {
+    const { data, error } = await supabase
+      .from('trading_reviews')
+      .select('*')
+      .eq('id', reviewId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (error) {
+      console.warn('Falling back to local review storage due to Supabase error:', error.message);
+      return MockStorage.getReview(reviewId, userId);
+    }
+    
+    return data;
+  } catch {
+    return MockStorage.getReview(reviewId, userId);
+  }
 }
 
 /**
  * Create a new review
  */
 export async function createReview(input: TradingReviewInsert): Promise<TradingReview> {
-  const { data, error } = await supabase
-    .from('trading_reviews')
-    .insert(input)
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('Error creating review:', error);
-    throw new Error('خطا در ایجاد بازبینی');
+  if (!isSupabaseConfigured || input.user_id === 'guest-demo-user') {
+    return MockStorage.createReview(input);
   }
-  
-  return data;
+
+  try {
+    const { data, error } = await supabase
+      .from('trading_reviews')
+      .insert(input)
+      .select()
+      .single();
+    
+    if (error) {
+      console.warn('Supabase insert failed, storing review locally:', error.message);
+      return MockStorage.createReview(input);
+    }
+    
+    return data;
+  } catch {
+    return MockStorage.createReview(input);
+  }
 }
 
 /**
@@ -75,35 +101,51 @@ export async function updateReview(
   userId: string,
   input: TradingReviewUpdate
 ): Promise<TradingReview> {
-  const { data, error } = await supabase
-    .from('trading_reviews')
-    .update(input)
-    .eq('id', reviewId)
-    .eq('user_id', userId)
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('Error updating review:', error);
-    throw new Error('خطا در بروزرسانی بازبینی');
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.updateReview(reviewId, input);
   }
-  
-  return data;
+
+  try {
+    const { data, error } = await supabase
+      .from('trading_reviews')
+      .update(input)
+      .eq('id', reviewId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.warn('Supabase update failed, updating review locally:', error.message);
+      return MockStorage.updateReview(reviewId, input);
+    }
+    
+    return data;
+  } catch {
+    return MockStorage.updateReview(reviewId, input);
+  }
 }
 
 /**
  * Delete a review
  */
 export async function deleteReview(reviewId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('trading_reviews')
-    .delete()
-    .eq('id', reviewId)
-    .eq('user_id', userId);
-  
-  if (error) {
-    console.error('Error deleting review:', error);
-    throw new Error('خطا در حذف بازبینی');
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.deleteReview(reviewId);
+  }
+
+  try {
+    const { error } = await supabase
+      .from('trading_reviews')
+      .delete()
+      .eq('id', reviewId)
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.warn('Supabase delete failed, deleting review locally:', error.message);
+      return MockStorage.deleteReview(reviewId);
+    }
+  } catch {
+    return MockStorage.deleteReview(reviewId);
   }
 }
 

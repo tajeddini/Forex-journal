@@ -1,50 +1,76 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
+import { MockStorage } from './mockStorage';
 import type { ImportBatch, ImportBatchInsert, ImportBatchUpdate, ImportBatchStatus } from '../types/database';
 
 export async function getImportBatches(userId: string): Promise<ImportBatch[]> {
-  const { data, error } = await supabase
-    .from('import_batches')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching import batches:', error);
-    throw new Error('خطا در دریافت تاریخچه ورود');
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.getImportBatches(userId);
   }
 
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('import_batches')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Falling back to local import batches storage:', error.message);
+      return MockStorage.getImportBatches(userId);
+    }
+
+    return data || [];
+  } catch (err) {
+    console.warn('Supabase query failed for import batches, using local storage:', err);
+    return MockStorage.getImportBatches(userId);
+  }
 }
 
 export async function getImportBatch(batchId: string, userId: string): Promise<ImportBatch | null> {
-  const { data, error } = await supabase
-    .from('import_batches')
-    .select('*')
-    .eq('id', batchId)
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error fetching import batch:', error);
-    throw new Error('خطا در دریافت batch');
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.getImportBatch(batchId, userId);
   }
 
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('import_batches')
+      .select('*')
+      .eq('id', batchId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Falling back to local import batch storage:', error.message);
+      return MockStorage.getImportBatch(batchId, userId);
+    }
+
+    return data;
+  } catch {
+    return MockStorage.getImportBatch(batchId, userId);
+  }
 }
 
 export async function createImportBatch(input: ImportBatchInsert): Promise<ImportBatch> {
-  const { data, error } = await supabase
-    .from('import_batches')
-    .insert(input)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating import batch:', error);
-    throw new Error('خطا در ایجاد batch');
+  if (!isSupabaseConfigured || input.user_id === 'guest-demo-user') {
+    return MockStorage.createImportBatch(input);
   }
 
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('import_batches')
+      .insert(input)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase insert failed, saving import batch locally:', error.message);
+      return MockStorage.createImportBatch(input);
+    }
+
+    return data;
+  } catch {
+    return MockStorage.createImportBatch(input);
+  }
 }
 
 export async function updateImportBatch(
@@ -52,20 +78,28 @@ export async function updateImportBatch(
   userId: string,
   input: ImportBatchUpdate
 ): Promise<ImportBatch> {
-  const { data, error } = await supabase
-    .from('import_batches')
-    .update(input)
-    .eq('id', batchId)
-    .eq('user_id', userId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating import batch:', error);
-    throw new Error('خطا در بروزرسانی batch');
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.updateImportBatch(batchId, input);
   }
 
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('import_batches')
+      .update(input)
+      .eq('id', batchId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase update failed, updating import batch locally:', error.message);
+      return MockStorage.updateImportBatch(batchId, input);
+    }
+
+    return data;
+  } catch {
+    return MockStorage.updateImportBatch(batchId, input);
+  }
 }
 
 export async function completeImportBatch(
