@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ژورنال معاملاتی فارکس</title>
+    <meta name="description" content="ژورنال معاملاتی فارکس - پلتفرم جامع برای ثبت، مدیریت و تحلیل معاملات فارکس با تمرکز بر بهبود عملکرد معامله‌گر" />
+    <meta property="og:title" content="ژورنال معاملاتی فارکس" />
+    <meta property="og:description" content="ژورنال معاملاتی فارکس - پلتفرم جامع برای ثبت، مدیریت و تحلیل معاملات فارکس با تمرکز بر بهبود عملکرد معامله‌گر" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+      }
+      html.dark, html.dark body {
+        background-color: #0f172a !important;
+        color: #e2e8f0;
+      }
+      html.light, html.light body {
+        background-color: #f8fafc !important;
+        color: #1e293b;
+      }
+    </style>
+    <script>
+      (function () {
+        function applyTheme(theme) {
+          document.documentElement.classList.remove('light', 'dark');
+          document.documentElement.classList.add(theme);
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') {
+          applyTheme(saved);
+        } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          applyTheme('dark');
+        } else {
+          applyTheme('light');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
