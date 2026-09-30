@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getReviews, createReview, updateReview, deleteReview, getReviewPeriod } from '../../services/reviews';
-import type { TradingReview, ReviewType } from '../../types/database';
+import { getAccounts } from '../../services/accounts';
+import type { TradingReview, ReviewType, TradingAccount } from '../../types/database';
 import { REVIEW_TYPES } from '../../types/database';
 import { Card, CardTitle, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -24,6 +25,7 @@ export default function ReviewsPage() {
   const toast = useToast();
   
   const [reviews, setReviews] = useState<TradingReview[]>([]);
+  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<ReviewType | 'all'>('all');
   
@@ -54,13 +56,17 @@ export default function ReviewsPage() {
     next_period_plan: '',
   });
 
-  // Fetch reviews
+  // Fetch reviews and accounts
   useEffect(() => {
     if (user) {
       getReviews(user.id, filterType === 'all' ? undefined : filterType)
         .then(setReviews)
         .catch(() => toast.error('خطا در دریافت بازبینی‌ها'))
         .finally(() => setLoading(false));
+
+      getAccounts(user.id)
+        .then(setAccounts)
+        .catch(() => {});
     }
   }, [user, filterType]);
 
@@ -213,6 +219,11 @@ export default function ReviewsPage() {
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {formatDate(review.review_date)}
                     </span>
+                    {review.account_id && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        {accounts.find(a => a.id === review.account_id)?.name || 'حساب'}
+                      </span>
+                    )}
                   </div>
                   {review.summary && (
                     <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
@@ -248,7 +259,7 @@ export default function ReviewsPage() {
         size="lg"
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Select
               label="نوع بازبینی"
               value={formData.review_type}
@@ -261,6 +272,15 @@ export default function ReviewsPage() {
               value={formData.review_date}
               onChange={(e) => setFormData(prev => ({ ...prev, review_date: e.target.value }))}
               dir="ltr"
+            />
+            <Select
+              label="حساب معاملاتی"
+              value={formData.account_id}
+              onChange={(e) => setFormData(prev => ({ ...prev, account_id: e.target.value }))}
+              options={[
+                { value: '', label: 'همه حساب‌ها / عمومی' },
+                ...accounts.map(acc => ({ value: acc.id, label: acc.name })),
+              ]}
             />
           </div>
 

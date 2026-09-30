@@ -21,6 +21,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { Loading } from '../../components/ui/Loading';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { TradingSuggestions } from '../../components/analytics/TradingSuggestions';
 import { formatCurrency, formatNumber } from '../../utils/format';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -116,6 +117,7 @@ export default function CustomDashboardPage() {
   const drawdown = useMemo(() => calculateDrawdown(equity), [equity]);
   const dailyPnl = useMemo(() => aggregateByTime(trades, 'daily'), [trades]);
   const symbolPerformance = useMemo(() => calculatePerformanceBreakdown(trades, t => t.symbol), [trades]);
+  const sidePerformance = useMemo(() => calculatePerformanceBreakdown(trades, t => t.side), [trades]);
 
   // Save layout
   const saveLayout = async (newWidgets: DashboardWidget[]) => {
@@ -179,6 +181,16 @@ export default function CustomDashboardPage() {
           ]}
         />
       </Card>
+
+      {/* Smart Trading Suggestions in Persian */}
+      {metrics && metrics.totalTrades > 0 && (
+        <TradingSuggestions
+          metrics={metrics}
+          drawdown={drawdown}
+          symbolPerformance={symbolPerformance}
+          sidePerformance={sidePerformance}
+        />
+      )}
 
       {/* Widgets Grid */}
       {widgets.length === 0 ? (

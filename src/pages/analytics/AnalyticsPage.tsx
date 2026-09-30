@@ -11,6 +11,7 @@ import { Select } from '../../components/ui/Select';
 import { Loading } from '../../components/ui/Loading';
 import { StatusNotice } from '../../components/ui/StatusNotice';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { TradingSuggestions } from '../../components/analytics/TradingSuggestions';
 import { formatCurrency, formatNumber, formatDuration } from '../../utils/format';
 import type { TradingAccount } from '../../types/database';
 import {
@@ -110,6 +111,9 @@ export default function AnalyticsPage() {
         />
       ) : (
         <>
+          {/* Smart Trading Suggestions */}
+          <TradingSuggestions analytics={analytics} />
+
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <KpiCard label="کل معاملات" value={analytics.metrics.totalTrades.toString()} />

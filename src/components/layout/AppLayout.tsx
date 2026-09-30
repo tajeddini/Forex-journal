@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useGuest } from '../../contexts/GuestContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useState } from 'react';
 
@@ -17,11 +18,13 @@ const navItems = [
 
 export default function AppLayout() {
   const { user, profile, signOut } = useAuth();
+  const { exitGuestMode } = useGuest();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
+    exitGuestMode();
     await signOut();
     navigate('/login');
   };

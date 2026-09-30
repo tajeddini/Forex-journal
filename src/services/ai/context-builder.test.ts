@@ -267,7 +267,7 @@ describe('AI Context Builder', () => {
         userId: 'user-123',
         sampleSize: 10,
         metrics: {},
-        trades: Array(50).fill({ symbol: 'EURUSD', profit: 100 }),
+        trades: Array(50).fill({ symbol: 'EURUSD', profit: 100, comment: 'Trade details with notes and technical analysis' }),
         breakdowns: { symbol: { EURUSD: 50, GBPUSD: 50 } }
       };
 

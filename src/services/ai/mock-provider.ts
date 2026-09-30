@@ -91,27 +91,31 @@ export class MockAIProvider implements AIProvider {
 
     // Simple pattern matching for common queries
     if (lowerPrompt.includes('تعداد معاملات') || lowerPrompt.includes('how many trades')) {
-      return 'بر اساس داده‌های موجود، شما در دوره مشخص شده ۴۵ معامله داشته‌اید.';
+      return 'بر اساس داده‌های موجود، شما در دوره مشخص شده ۴۵ معامله داشته‌اید که نشان‌دهنده فعالیت منظم در بازار است.';
     }
 
     if (lowerPrompt.includes('نرخ برد') || lowerPrompt.includes('win rate')) {
-      return 'نرخ برد شما در این دوره ۶۲.۵٪ بوده است که بالاتر از میانگین معمول است.';
+      return 'نرخ برد شما در این دوره ۶۲.۵٪ بوده است که بالاتر از میانگین معمول است و نشان‌دهنده کیفیت مناسب ستاپ‌های انتخابی می‌باشد.';
     }
 
     if (lowerPrompt.includes('eurusd')) {
-      return 'عملکرد شما در EURUSD شامل ۱۲ معامله با نرخ برد ۶۶.۷٪ و سود خالص ۳۵۰ دلار بوده است.';
+      return 'عملکرد شما در جفت‌ارز EURUSD شامل ۱۲ معامله با نرخ برد ۶۶.۷٪ و سود خالص ۳۵۰ دلار بوده است. این جفت‌ارز یکی از پربازده‌ترین دارایی‌های شماست.';
     }
 
     if (lowerPrompt.includes('جمعه') || lowerPrompt.includes('friday')) {
-      return 'در روزهای جمعه شما ۸ معامله انجام داده‌اید با نرخ برد ۵۰٪.';
+      return 'در روزهای جمعه شما ۸ معامله انجام داده‌اید با نرخ برد ۵۰٪. توصیه می‌شود در ساعات پایانی روز جمعه به دلیل کاهش نقدینگی و نوسانات نامنظم، حجم معاملات را کاهش دهید.';
     }
 
     if (lowerPrompt.includes('استراتژی') || lowerPrompt.includes('strategy')) {
-      return 'استراتژی Breakout شما بیشترین تعداد معامله (۲۰ معامله) را داشته است.';
+      return 'استراتژی Breakout شما بیشترین تعداد معامله (۲۰ معامله) را داشته است و بالاترین سودآوری تجمعی را ایجاد کرده است.';
     }
 
-    // Default response
-    return 'این یک پاسخ نمونه از Mock AI Provider است. برای دریافت پاسخ‌های واقعی، لطفاً یک provider واقعی مانند OpenAI یا Qwen را پیکربندی کنید.';
+    if (lowerPrompt.includes('پیشنهاد') || lowerPrompt.includes('توصیه') || lowerPrompt.includes('suggest') || lowerPrompt.includes('recommend')) {
+      return 'پیشنهاد می‌شود به قوانین مدیریت ریسک و حفظ حداکثر ۱٪ سرمایه در هر پوزیشن پایبند بمانید، از ورودهای پرریسک در ساعات غیرسشن خودداری فرمایید و پس از دو معامله زیان‌ده متوالی، معاملات روزانه را متوقف کنید.';
+    }
+
+    // Default response in fluent Persian
+    return 'بر اساس بررسی عملکرد معاملاتی شما، روند کلی مثبت است. پیشنهاد می‌شود برای حفظ پایداری حساب، بر روی ستاپ‌های با نسبت ریسک به ریوارد حداقل ۱ به ۲ تمرکز کرده و از معاملات هیجانی در زمان انتشار اخبار پرنوسان پرهیز نمایید.';
   }
 
   private generateMockStructuredResponse<T>(schema: AISchemaDefinition): T {
@@ -121,7 +125,37 @@ export class MockAIProvider implements AIProvider {
       
       if (schema.properties) {
         for (const [key, prop] of Object.entries(schema.properties)) {
-          result[key] = this.generateMockValue(prop);
+          // Provide context-aware Persian content for key fields
+          if (key === 'recommendations') {
+            result[key] = [
+              'میزان ریسک در هر معامله را حداکثر روی ۱ تا ۱.۵ درصد بالانس حفظ کنید.',
+              'بر روی ساعات آغازین سشن لندن و نیویورک تمرکز کنید و از معاملات قبل از اخبار مهم دوری نمایید.',
+              'معاملات کوتاه‌مدت زیر ۳ دقیقه را محدود کنید تا از خطاهای هیجانی جلوگیری شود.',
+            ];
+          } else if (key === 'observations') {
+            result[key] = [
+              'بیشترین بازدهی و نرخ برد در جفت‌ارزهای ماژور ثبت شده است.',
+              'معاملات پوزیشن خرید با پایبندی بالاتر به استراتژی همراه بوده‌اند.',
+              'حفظ خونسردی و یادداشت منظم وقایع در ژورنال نتایج را بهبود داده است.',
+            ];
+          } else if (key === 'suggestions') {
+            result[key] = [
+              {
+                tagName: 'ستاپ تایید شده',
+                reason: 'تمام معیارهای چک‌لیست استراتژی ورود رعایت شده است.',
+                confidence: 90,
+              },
+              {
+                tagName: 'مدیریت ریسک هوشمند',
+                reason: 'حد ضرر و حد سود طبق استاندارد برنامه معاملاتی تنظیم گردیده است.',
+                confidence: 85,
+              },
+            ];
+          } else if (key === 'summary') {
+            result[key] = 'خلاصه تحلیل: انضباط معاملاتی مطلوب با نرخ سودآوری پایدار در سشن‌های اصلی.';
+          } else {
+            result[key] = this.generateMockValue(prop);
+          }
         }
       }
       
@@ -146,7 +180,7 @@ export class MockAIProvider implements AIProvider {
 
     switch (schema.type) {
       case 'string':
-        return 'نمونه متن';
+        return 'تحلیل و پیشنهاد معاملاتی هوشمند به زبان فارسی';
       case 'number':
         return 42;
       case 'boolean':
@@ -160,7 +194,7 @@ export class MockAIProvider implements AIProvider {
         }
         return obj;
       case 'array':
-        return [];
+        return ['پیشنهاد اول: رعایت حد ضرر روزانه', 'پیشنهاد دوم: ثبت منظم بازبینی ژورنال'];
       default:
         return null;
     }

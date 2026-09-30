@@ -59,11 +59,30 @@ export function mapColumns(headers: string[]): Record<string, string> {
   for (const header of headers) {
     const normalizedHeader = header.toLowerCase().trim();
     
+    // First: exact match against any alias
+    let matchedField: string | null = null;
     for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
-      if (aliases.some(alias => normalizedHeader === alias || normalizedHeader.includes(alias))) {
-        mapping[header] = field;
+      if (aliases.some(alias => normalizedHeader === alias)) {
+        matchedField = field;
         break;
       }
+    }
+
+    // Second: if no exact match, find the longest matching substring alias
+    if (!matchedField) {
+      let longestMatchLength = 0;
+      for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
+        for (const alias of aliases) {
+          if (normalizedHeader.includes(alias) && alias.length > longestMatchLength) {
+            longestMatchLength = alias.length;
+            matchedField = field;
+          }
+        }
+      }
+    }
+
+    if (matchedField) {
+      mapping[header] = matchedField;
     }
   }
 
