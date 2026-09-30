@@ -36,10 +36,8 @@ function lazyWithRetry<T extends ComponentType<any>>(
 const LoginPage = lazyWithRetry(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazyWithRetry(() => import('./pages/auth/RegisterPage'));
 const GuestLoginPage = lazyWithRetry(() => import('./pages/auth/GuestLoginPage'));
-const DashboardPage = lazyWithRetry(() => import('./pages/dashboard/DashboardPage'));
 const AccountsPage = lazyWithRetry(() => import('./pages/accounts/AccountsPage'));
 const AccountDetailPage = lazyWithRetry(() => import('./pages/accounts/AccountDetailPage'));
-const PlaceholderPage = lazyWithRetry(() => import('./pages/PlaceholderPage'));
 const ImportPage = lazyWithRetry(() => import('./pages/import/ImportPage'));
 const TradesPage = lazyWithRetry(() => import('./pages/trades/TradesPage'));
 const TradeDetailPage = lazyWithRetry(() => import('./pages/trades/TradeDetailPage'));

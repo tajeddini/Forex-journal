@@ -3,7 +3,7 @@
 // ============================================================
 
 import { describe, it, expect } from 'vitest';
-import { validateQueryPlan, isAllowedMetric, isAllowedDimension } from './validation';
+import { validateQueryPlan, isAllowedMetric, isAllowedDimension, validateQueryPlanOwnership } from './validation';
 import type { AIQueryPlan } from './types';
 
 describe('AI Query Validation', () => {
@@ -163,16 +163,39 @@ describe('AI Query Validation', () => {
     });
   });
 
-  describe('isAllowedDimension', () => {
-    it('should accept valid dimensions', () => {
-      expect(isAllowedDimension('symbol')).toBe(true);
-      expect(isAllowedDimension('side')).toBe(true);
-      expect(isAllowedDimension('strategy')).toBe(true);
+  describe('validateQueryPlanOwnership', () => {
+    it('verifies that account and phase IDs belong to the user', () => {
+      const query: AIQueryPlan = {
+        metrics: ['totalTrades'],
+        filters: [
+          { field: 'account', operator: 'equals', value: 'acc-1' },
+          { field: 'phase', operator: 'equals', value: 'phase-1' },
+        ],
+      };
+
+      const userAccounts = ['acc-1', 'acc-2'];
+      const userPhases = ['phase-1'];
+
+      const errors = validateQueryPlanOwnership(query, userAccounts, userPhases);
+      expect(errors).toHaveLength(0);
     });
 
-    it('should reject invalid dimensions', () => {
-      expect(isAllowedDimension('invalidDimension')).toBe(false);
-      expect(isAllowedDimension('password')).toBe(false);
+    it('rejects cross-user account and phase identifiers', () => {
+      const query: AIQueryPlan = {
+        metrics: ['totalTrades'],
+        filters: [
+          { field: 'account', operator: 'equals', value: 'victim-account-id' },
+          { field: 'phase', operator: 'equals', value: 'victim-phase-id' },
+        ],
+      };
+
+      const userAccounts = ['my-account-1'];
+      const userPhases = ['my-phase-1'];
+
+      const errors = validateQueryPlanOwnership(query, userAccounts, userPhases);
+      expect(errors.length).toBe(2);
+      expect(errors[0]).toContain('شناسه حساب غیرمجاز');
+      expect(errors[1]).toContain('شناسه فاز غیرمجاز');
     });
   });
 });

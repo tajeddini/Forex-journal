@@ -240,6 +240,51 @@ function performSecurityChecks(query: AIQueryPlan): string[] {
 }
 
 /**
+ * Verify account and phase filters strictly belong to the authenticated user
+ */
+export function validateQueryPlanOwnership(
+  query: AIQueryPlan,
+  userAccountIds: string[],
+  userPhaseIds: string[]
+): string[] {
+  const errors: string[] = [];
+  const validAccountSet = new Set(userAccountIds);
+  const validPhaseSet = new Set(userPhaseIds);
+
+  if (query.filters) {
+    for (const filter of query.filters) {
+      if (filter.field === 'account') {
+        const val = filter.value;
+        if (Array.isArray(val)) {
+          for (const id of val) {
+            if (!validAccountSet.has(String(id))) {
+              errors.push(`شناسه حساب غیرمجاز یا نامعتبر: ${id}`);
+            }
+          }
+        } else if (val && !validAccountSet.has(String(val))) {
+          errors.push(`شناسه حساب غیرمجاز یا نامعتبر: ${val}`);
+        }
+      }
+
+      if (filter.field === 'phase') {
+        const val = filter.value;
+        if (Array.isArray(val)) {
+          for (const id of val) {
+            if (!validPhaseSet.has(String(id))) {
+              errors.push(`شناسه فاز غیرمجاز یا نامعتبر: ${id}`);
+            }
+          }
+        } else if (val && !validPhaseSet.has(String(val))) {
+          errors.push(`شناسه فاز غیرمجاز یا نامعتبر: ${val}`);
+        }
+      }
+    }
+  }
+
+  return errors;
+}
+
+/**
  * Check if a metric is allowed
  */
 export function isAllowedMetric(metric: string): metric is AIMetric {

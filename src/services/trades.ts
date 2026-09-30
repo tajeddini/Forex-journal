@@ -20,8 +20,7 @@ export async function getTrades(userId: string, accountId?: string): Promise<Tra
   const { data, error } = await query;
 
   if (error) {
-    console.error('Error fetching trades:', error);
-    return MockStorage.getTrades({ accountId });
+    throw new Error(`خطا در دریافت معاملات از پایگاه داده: ${error.message}`);
   }
 
   return data || [];
@@ -40,8 +39,7 @@ export async function getTrade(tradeId: string, userId: string): Promise<Trade |
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching trade:', error);
-    return MockStorage.getTrade(tradeId);
+    throw new Error(`خطا در دریافت معامله: ${error.message}`);
   }
 
   return data;
@@ -59,15 +57,16 @@ export async function createTrade(input: TradeInsert): Promise<Trade> {
     .single();
 
   if (error) {
-    console.error('Error creating trade:', error);
-    return MockStorage.createTrade(input);
+    throw new Error(`خطا در ذخیره معامله: ${error.message}`);
   }
 
   return data;
 }
 
 export async function createTradesBatch(trades: TradeInsert[]): Promise<Trade[]> {
-  if (!isSupabaseConfigured || (trades[0] && trades[0].user_id === 'guest-demo-user')) {
+  if (trades.length === 0) return [];
+
+  if (!isSupabaseConfigured || trades[0].user_id === 'guest-demo-user') {
     const created: Trade[] = [];
     for (const t of trades) {
       created.push(await MockStorage.createTrade(t));
@@ -81,12 +80,7 @@ export async function createTradesBatch(trades: TradeInsert[]): Promise<Trade[]>
     .select();
 
   if (error) {
-    console.error('Error creating trades batch:', error);
-    const created: Trade[] = [];
-    for (const t of trades) {
-      created.push(await MockStorage.createTrade(t));
-    }
-    return created;
+    throw new Error(`خطا در ذخیره گروهی معاملات: ${error.message}`);
   }
 
   return data || [];
@@ -114,8 +108,7 @@ export async function getTradeCount(userId: string, accountId?: string): Promise
   const { count, error } = await query;
 
   if (error) {
-    const trades = await MockStorage.getTrades({ accountId });
-    return trades.length;
+    throw new Error(`خطا در شمارش معاملات: ${error.message}`);
   }
 
   return count || 0;
@@ -142,9 +135,14 @@ export async function checkDuplicateTrades(
     .in('ticket', tickets);
 
   if (error) {
-    console.error('Error checking duplicates:', error);
-    return new Set();
+    throw new Error(`خطا در بررسی معاملات تکراری: ${error.message}`);
   }
 
-  return new Set(data?.map((t) => t.ticket).filter(Boolean) || []);
+  const existingTickets = new Set(
+    (data || [])
+      .map((t: { ticket: string | null }) => t.ticket)
+      .filter((t): t is string => Boolean(t))
+  );
+
+  return existingTickets;
 }

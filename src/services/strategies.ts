@@ -13,7 +13,10 @@ export async function getStrategies(userId: string): Promise<Strategy[]> {
     .eq('user_id', userId)
     .order('name');
 
-  if (error) return MockStorage.getStrategies();
+  if (error) {
+    throw new Error(`خطا در دریافت استراتژی‌ها: ${error.message}`);
+  }
+
   return data || [];
 }
 
@@ -36,7 +39,7 @@ export async function createStrategy(input: StrategyInsert): Promise<Strategy> {
     .select()
     .single();
 
-  if (error) throw new Error('خطا در ایجاد استراتژی');
+  if (error) throw new Error(`خطا در ایجاد استراتژی: ${error.message}`);
   return data;
 }
 
@@ -55,7 +58,7 @@ export async function updateStrategy(id: string, userId: string, input: Strategy
     .select()
     .single();
 
-  if (error) throw new Error('خطا در بروزرسانی استراتژی');
+  if (error) throw new Error(`خطا در بروزرسانی استراتژی: ${error.message}`);
   return data;
 }
 
@@ -70,5 +73,5 @@ export async function deleteStrategy(id: string, userId: string): Promise<void> 
     .eq('id', id)
     .eq('user_id', userId);
 
-  if (error) throw new Error('خطا در حذف استراتژی');
+  if (error) throw new Error(`خطا در حذف استراتژی: ${error.message}`);
 }

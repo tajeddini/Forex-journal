@@ -1,6 +1,7 @@
 // ============================================================
 // Trade Images Service
-// Handles trade screenshot upload, retrieval, and deletion
+// Handles trade screenshot upload, retrieval, deletion & replacement
+// with atomic rollback guarantees and zero silent mock fallbacks
 // ============================================================
 
 import { supabase, isSupabaseConfigured } from './supabase';
@@ -12,14 +13,13 @@ import type { TradeImage, TradeImageInsert } from '../types/database';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Upload a trade image
+ * Upload a trade image with rollback on DB failure
  */
 export async function uploadTradeImage(
   tradeId: string,
   userId: string,
   file: File
 ): Promise<TradeImage> {
-  // Validate file
   const validation = validateImageFile(file);
   if (!validation.valid) {
     throw new Error(validation.error);
@@ -29,17 +29,8 @@ export async function uploadTradeImage(
   const processed = await processImage(file);
 
   // Generate unique storage path
-  const extension = 'webp';
-  const filename = `${uuidv4()}.${extension}`;
+  const filename = `${uuidv4()}.webp`;
   const storagePath = `trades/${tradeId}/${filename}`;
-
-  // Upload to storage
-  const provider = getSupabaseStorageProvider();
-  await provider.upload({
-    path: storagePath,
-    file: processed.blob,
-    contentType: 'image/webp',
-  });
 
   const insertData: TradeImageInsert = {
     trade_id: tradeId,
@@ -65,6 +56,15 @@ export async function uploadTradeImage(
     return MockStorage.saveTradeImage(localImage);
   }
 
+  // Upload to storage
+  const provider = getSupabaseStorageProvider();
+  await provider.upload({
+    path: storagePath,
+    file: processed.blob,
+    contentType: 'image/webp',
+  });
+
+  // Insert metadata into DB; if fails, roll back storage upload!
   const { data, error } = await supabase
     .from('trade_images')
     .insert(insertData)
@@ -72,14 +72,12 @@ export async function uploadTradeImage(
     .single();
 
   if (error) {
-    // If remote DB fails, fall back to local store
-    const localImage: TradeImage = {
-      ...insertData,
-      id: `img-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    return MockStorage.saveTradeImage(localImage);
+    try {
+      await provider.delete(storagePath);
+    } catch {
+      // rollback attempted
+    }
+    throw new Error(`خطا در ثبت اطلاعات تصویر در پایگاه داده: ${error.message}`);
   }
 
   return data;
@@ -88,20 +86,24 @@ export async function uploadTradeImage(
 /**
  * Get all images for a trade
  */
-export async function getTradeImages(tradeId: string): Promise<TradeImage[]> {
-  if (!isSupabaseConfigured) {
+export async function getTradeImages(tradeId: string, userId?: string): Promise<TradeImage[]> {
+  if (!isSupabaseConfigured || (userId && userId === 'guest-demo-user')) {
     return MockStorage.getTradeImages(tradeId);
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('trade_images')
     .select('*')
     .eq('trade_id', tradeId)
     .order('created_at', { ascending: true });
 
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query;
   if (error) {
-    // Graceful fallback to local/mock images instead of throwing
-    return MockStorage.getTradeImages(tradeId);
+    throw new Error(`خطا در دریافت تصاویر معامله: ${error.message}`);
   }
 
   return data || [];
@@ -112,12 +114,16 @@ export async function getTradeImages(tradeId: string): Promise<TradeImage[]> {
  */
 export async function getTradeImageUrl(image: TradeImage): Promise<string> {
   const provider = getSupabaseStorageProvider();
-  const url = await provider.getSignedUrl(image.storage_path);
-  return url || image.storage_path;
+  try {
+    const url = await provider.getSignedUrl(image.storage_path);
+    return url || image.storage_path;
+  } catch {
+    return image.storage_path;
+  }
 }
 
 /**
- * Delete a trade image with safety guarantees
+ * Delete a trade image with ownership verification & transactional safety
  */
 export async function deleteTradeImage(imageId: string, userId: string): Promise<void> {
   if (!isSupabaseConfigured || userId === 'guest-demo-user') {
@@ -125,26 +131,25 @@ export async function deleteTradeImage(imageId: string, userId: string): Promise
     return;
   }
 
-  // Step 1: Get image metadata and verify ownership
+  // Step 1: Verify image exists and belongs to the user
   const { data: image, error: fetchError } = await supabase
     .from('trade_images')
     .select('*')
     .eq('id', imageId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
-  if (fetchError || !image) {
-    await MockStorage.deleteTradeImage(imageId);
-    return;
+  if (fetchError) {
+    throw new Error(`خطا در بررسی مالکیت تصویر: ${fetchError.message}`);
+  }
+  if (!image) {
+    throw new Error('تصویر مورد نظر یافت نشد یا دسترسی غیرمجاز است');
   }
 
-  // Step 2: Delete from storage FIRST
   const provider = getSupabaseStorageProvider();
-  try {
-    await provider.delete(image.storage_path);
-  } catch (storageError) {
-    console.error('Storage deletion error:', storageError);
-  }
+
+  // Step 2: Delete from storage
+  await provider.delete(image.storage_path);
 
   // Step 3: Delete from database
   const { error: dbError } = await supabase
@@ -154,12 +159,16 @@ export async function deleteTradeImage(imageId: string, userId: string): Promise
     .eq('user_id', userId);
 
   if (dbError) {
-    await MockStorage.deleteTradeImage(imageId);
+    throw new Error(`خطا در حذف رکورد تصویر از پایگاه داده: ${dbError.message}`);
   }
 }
 
 /**
- * Replace a trade image
+ * Replace a trade image safely:
+ * - Upload new image
+ * - Update metadata
+ * - If update fails, delete the new image
+ * - Clean old image only after successful DB update
  */
 export async function replaceTradeImage(
   imageId: string,
@@ -171,49 +180,72 @@ export async function replaceTradeImage(
     return uploadTradeImage('mock-trade-1', userId, newFile);
   }
 
+  // Step 1: Verify existing image ownership
   const { data: existingImage, error: fetchError } = await supabase
     .from('trade_images')
     .select('*')
     .eq('id', imageId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !existingImage) {
-    return uploadTradeImage('mock-trade-1', userId, newFile);
+    throw new Error('تصویر قبلی جهت جایگزینی یافت نشد');
   }
 
-  const oldStoragePath = existingImage.storage_path;
+  const validation = validateImageFile(newFile);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
 
-  const newImage = await uploadTradeImage(
-    existingImage.trade_id,
-    userId,
-    newFile
-  );
+  const processed = await processImage(newFile);
+  const newFilename = `${uuidv4()}.webp`;
+  const newStoragePath = `trades/${existingImage.trade_id}/${newFilename}`;
 
-  const { error: updateError } = await supabase
+  const provider = getSupabaseStorageProvider();
+
+  // Step 2: Upload new storage object
+  await provider.upload({
+    path: newStoragePath,
+    file: processed.blob,
+    contentType: 'image/webp',
+  });
+
+  // Step 3: Update metadata in DB
+  const { data: updatedRecord, error: updateError } = await supabase
     .from('trade_images')
     .update({
-      storage_path: newImage.storage_path,
-      original_filename: newImage.original_filename,
-      original_size_bytes: newImage.original_size_bytes,
-      processed_size_bytes: newImage.processed_size_bytes,
-      mime_type: newImage.mime_type,
-      width: newImage.width,
-      height: newImage.height,
+      storage_path: newStoragePath,
+      original_filename: newFile.name,
+      original_size_bytes: processed.originalSize,
+      processed_size_bytes: processed.processedSize,
+      mime_type: 'image/webp',
+      width: processed.width,
+      height: processed.height,
+      updated_at: new Date().toISOString(),
     })
     .eq('id', imageId)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select()
+    .single();
 
-  if (!updateError) {
+  if (updateError) {
+    // Rollback newly uploaded image to prevent orphaned storage objects
     try {
-      const provider = getSupabaseStorageProvider();
-      await provider.delete(oldStoragePath);
+      await provider.delete(newStoragePath);
     } catch {
-      // Ignore cleanup error
+      // rollback attempted
     }
+    throw new Error(`خطا در به‌روزرسانی اطلاعات تصویر: ${updateError.message}`);
   }
 
-  return newImage;
+  // Step 4: Clean up old storage object
+  try {
+    await provider.delete(existingImage.storage_path);
+  } catch (cleanErr) {
+    console.warn('Warning: Failed to clean up old screenshot:', cleanErr);
+  }
+
+  return updatedRecord;
 }
 
 /**
@@ -238,11 +270,7 @@ export async function getStorageStats(userId: string): Promise<{
     .eq('user_id', userId);
 
   if (error) {
-    return {
-      totalImages: 0,
-      totalSizeBytes: 0,
-      averageSizeBytes: 0,
-    };
+    throw new Error(`خطا در دریافت آمار فضای ذخیره‌سازی: ${error.message}`);
   }
 
   const totalImages = data?.length || 0;

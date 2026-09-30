@@ -1,7 +1,9 @@
 import type { TradeSide, TradeSource } from '../types/database';
+import type { MT5Deal } from './mt5-aggregation';
 
 // ============================================================
 // Trade Data Normalizer
+// Supports MT4 closed trades & MT5 deal-level records
 // ============================================================
 
 export interface NormalizedTrade {
@@ -30,25 +32,69 @@ export interface NormalizationError {
   value?: string;
 }
 
-// Column mapping aliases
+// Column mapping aliases for closed trade exports (MT4 & general CSV)
 const COLUMN_ALIASES: Record<string, string[]> = {
   ticket: ['ticket', 'order', 'ticket number', 'order number'],
   position_id: ['position', 'position id', 'deal', 'deal number'],
-  symbol: ['symbol', 'instrument', 'pair', 'security'],
+  symbol: ['symbol', 'instrument', 'pair', 'security', 'item'],
   side: ['type', 'side', 'direction', 'order type', 'deal type'],
   volume: ['volume', 'lots', 'size', 'quantity'],
   entry_datetime: ['open time', 'open time1', 'entry time', 'open date', 'opened'],
-  entry_price: ['price', 'open price', 'entry price'],
+  entry_price: ['open price', 'entry price', 'price'],
   stop_loss: ['stop loss', 'sl', 's/l', 'stoploss'],
   take_profit: ['take profit', 'tp', 't/p', 'takeprofit'],
   exit_datetime: ['close time', 'close time1', 'exit time', 'close date', 'closed'],
   exit_price: ['close price', 'exit price'],
-  commission: ['commission'],
-  swap: ['swap'],
+  commission: ['commission', 'comm'],
+  swap: ['swap', 'rollover'],
   profit: ['profit', 'p/l', 'net profit', 'gross profit'],
   comment: ['comment', 'comments'],
   magic_number: ['magic', 'magic number', 'magicnumber'],
 };
+
+/**
+ * Detect trade source from CSV filename and/or headers
+ */
+export function detectTradeSource(
+  fileOrHeaders: string | string[],
+  headersParam?: string[]
+): TradeSource {
+  let filename = '';
+  let headers: string[] = [];
+
+  if (typeof fileOrHeaders === 'string') {
+    filename = fileOrHeaders.toLowerCase();
+    headers = headersParam || [];
+  } else if (Array.isArray(fileOrHeaders)) {
+    headers = fileOrHeaders;
+    filename = typeof headersParam === 'string' ? (headersParam as string).toLowerCase() : '';
+  }
+
+  const normalized = headers.map(h => h.toLowerCase().trim());
+
+  if (filename.includes('mt5') || filename.includes('metatrader5')) {
+    return 'mt5';
+  }
+  if (filename.includes('mt4') || filename.includes('metatrader4')) {
+    return 'mt4';
+  }
+
+  // MT5 checks: has deal or position or entry/direction columns
+  const hasDeal = normalized.some(h => h === 'deal' || h.includes('deal'));
+  const hasPosition = normalized.some(h => h === 'position' || h.includes('position'));
+  const hasEntryDirection = normalized.some(h => h === 'entry' || h === 'direction');
+  const hasMT4OpenAndClose = normalized.some(h => h.includes('open time')) && normalized.some(h => h.includes('close time'));
+
+  if ((hasDeal || hasPosition || hasEntryDirection) && !hasMT4OpenAndClose) {
+    return 'mt5';
+  }
+
+  if (hasMT4OpenAndClose) {
+    return 'mt4';
+  }
+
+  return 'mt4';
+}
 
 /**
  * Map CSV headers to normalized field names
@@ -95,10 +141,10 @@ export function mapColumns(headers: string[]): Record<string, string> {
 export function normalizeSide(value: string): TradeSide | null {
   const normalized = value.toLowerCase().trim();
   
-  if (['buy', 'long', 'buy in'].includes(normalized)) {
+  if (['buy', 'long', 'buy in', 'buy limit', 'buy stop'].includes(normalized)) {
     return 'buy';
   }
-  if (['sell', 'short', 'sell out'].includes(normalized)) {
+  if (['sell', 'short', 'sell out', 'sell limit', 'sell stop'].includes(normalized)) {
     return 'sell';
   }
   
@@ -108,12 +154,14 @@ export function normalizeSide(value: string): TradeSide | null {
 /**
  * Normalize numeric value
  */
-export function normalizeNumber(value: string): number | null {
+export function normalizeNumber(value: string | number): number | null {
+  if (typeof value === 'number') {
+    return isNaN(value) ? null : value;
+  }
   if (!value || value.trim() === '' || value === '-') {
     return null;
   }
 
-  // Remove thousands separator and handle decimal
   let cleaned = value.trim();
   
   // Handle European format (1.234,56 -> 1234.56)
@@ -126,7 +174,6 @@ export function normalizeNumber(value: string): number | null {
       cleaned = cleaned.replace(/,/g, '');
     }
   } else if (cleaned.includes(',')) {
-    // Could be decimal separator
     cleaned = cleaned.replace(',', '.');
   }
 
@@ -144,13 +191,10 @@ export function normalizeDatetime(value: string): string | null {
 
   let cleaned = value.trim();
 
-  // Handle MT4/MT5 formats
-  // 2024.01.15 14:30:00
+  // Handle MT4/MT5 formats: 2024.01.15 14:30:00 -> 2024-01-15 14:30:00
   cleaned = cleaned.replace(/(\d{4})\.(\d{2})\.(\d{2})/, '$1-$2-$3');
   
-  // Try to parse
   const date = new Date(cleaned);
-  
   if (isNaN(date.getTime())) {
     return null;
   }
@@ -159,7 +203,92 @@ export function normalizeDatetime(value: string): string | null {
 }
 
 /**
- * Normalize a single trade row
+ * Parse a raw row from MT5 Deals export into an MT5Deal
+ */
+export function parseMT5DealRow(
+  row: Record<string, string>,
+  rowNumber: number
+): { deal: MT5Deal | null; errors: NormalizationError[] } {
+  const errors: NormalizationError[] = [];
+
+  // Find fields by loose case-insensitive matching
+  const findVal = (keywords: string[]): string => {
+    for (const [key, val] of Object.entries(row)) {
+      const lower = key.toLowerCase().trim();
+      if (keywords.some(k => lower === k || lower.includes(k))) {
+        return val || '';
+      }
+    }
+    return '';
+  };
+
+  const symbol = findVal(['symbol', 'item']);
+  if (!symbol) {
+    errors.push({ row: rowNumber, field: 'symbol', message: 'نماد الزامی است' });
+  }
+
+  const typeVal = findVal(['type', 'side']);
+  const side = normalizeSide(typeVal);
+  if (!side) {
+    errors.push({ row: rowNumber, field: 'type', message: 'نوع معامله نامعتبر است', value: typeVal });
+  }
+
+  const volumeVal = findVal(['volume', 'size', 'lots']);
+  const volume = normalizeNumber(volumeVal);
+  if (volume === null || volume <= 0) {
+    errors.push({ row: rowNumber, field: 'volume', message: 'حجم نامعتبر است', value: volumeVal });
+  }
+
+  const priceVal = findVal(['price', 'deal price']);
+  const price = normalizeNumber(priceVal);
+  if (price === null || price < 0) {
+    errors.push({ row: rowNumber, field: 'price', message: 'قیمت نامعتبر است', value: priceVal });
+  }
+
+  const timeVal = findVal(['time', 'date', 'datetime']);
+  const datetime = normalizeDatetime(timeVal);
+  if (!datetime) {
+    errors.push({ row: rowNumber, field: 'time', message: 'زمان نامعتبر است', value: timeVal });
+  }
+
+  if (errors.length > 0) {
+    return { deal: null, errors };
+  }
+
+  const dealId = findVal(['deal', 'ticket']) || undefined;
+  const orderId = findVal(['order']) || undefined;
+  const positionId = findVal(['position', 'position id']) || orderId || dealId;
+  const entry = findVal(['entry', 'direction']) || undefined;
+  const commission = normalizeNumber(findVal(['commission'])) || 0;
+  const swap = normalizeNumber(findVal(['swap'])) || 0;
+  const profit = normalizeNumber(findVal(['profit'])) || 0;
+  const comment = findVal(['comment']) || undefined;
+  const magicRaw = normalizeNumber(findVal(['magic']));
+
+  const deal: MT5Deal = {
+    ticket: dealId,
+    position_id: positionId,
+    order_id: orderId,
+    deal_id: dealId,
+    symbol: symbol.trim(),
+    side: side!,
+    volume: volume!,
+    price: price!,
+    datetime: datetime!,
+    commission,
+    swap,
+    profit,
+    type: entry || 'deal',
+    entry,
+    comment: comment?.trim() || undefined,
+    magic_number: magicRaw !== null ? magicRaw : undefined,
+  };
+
+  return { deal, errors: [] };
+}
+
+/**
+ * Normalize a single closed trade row (MT4 & general CSV format)
  */
 export function normalizeTradeRow(
   row: Record<string, string>,
@@ -256,27 +385,4 @@ export function normalizeTradeRow(
   };
 
   return { trade, errors: [] };
-}
-
-/**
- * Detect trade source from filename or content
- */
-export function detectTradeSource(filename: string, headers: string[]): TradeSource {
-  const lowerFilename = filename.toLowerCase();
-  
-  if (lowerFilename.includes('mt5') || lowerFilename.includes('metatrader5')) {
-    return 'mt5';
-  }
-  if (lowerFilename.includes('mt4') || lowerFilename.includes('metatrader4')) {
-    return 'mt4';
-  }
-
-  // Check headers for MT5-specific fields
-  const headerStr = headers.join(' ').toLowerCase();
-  if (headerStr.includes('deal') || headerStr.includes('position')) {
-    return 'mt5';
-  }
-
-  // Default to MT4
-  return 'mt4';
 }

@@ -17,7 +17,8 @@ import { formatCurrency, formatDuration } from '../../utils/format';
 import { Link } from 'react-router-dom';
 
 export default function CalendarPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const userTimezone = profile?.timezone || 'Asia/Tehran';
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -48,7 +49,7 @@ export default function CalendarPage() {
     })
       .then(trades => {
         const classified = classifyTrades(trades);
-        const data = generateCalendarData(classified, startDate, endDate);
+        const data = generateCalendarData(classified, startDate, endDate, userTimezone);
         setCalendarData(data);
       })
       .catch(console.error)

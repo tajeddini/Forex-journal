@@ -1,9 +1,17 @@
 // ============================================================
 // MT5 Position Aggregation Engine
-// Handles multiple deals belonging to one logical position
+// Handles complex MT5 netting & hedging deal structures:
+// - single entry + full exit
+// - multiple entries + one exit (scaling in)
+// - multiple entries + multiple exits (scaling in & out)
+// - partial close and multiple partial closes
+// - remaining open volume
+// - separation of direction (buy/sell) vs entry/exit semantic (in/out/inout)
 // ============================================================
 
 import type { NormalizedTrade } from './trade-normalizer';
+
+export type MT5DealType = 'in' | 'out' | 'inout' | 'entry' | 'exit' | 'deal';
 
 export interface MT5Deal {
   ticket?: string;
@@ -18,7 +26,8 @@ export interface MT5Deal {
   commission: number;
   swap: number;
   profit: number;
-  type: 'entry' | 'exit' | 'in' | 'out' | 'buy' | 'sell' | 'deal';
+  type: MT5DealType | string;
+  entry?: string; // MT5 standard column: 'in', 'out', 'inout'
   comment?: string;
   magic_number?: number;
 }
@@ -29,6 +38,8 @@ export interface AggregatedPosition {
   symbol: string;
   side: 'buy' | 'sell';
   total_volume: number;
+  closed_volume: number;
+  remaining_open_volume: number;
   entry_datetime: string;
   exit_datetime: string;
   weighted_entry_price: number;
@@ -38,18 +49,54 @@ export interface AggregatedPosition {
   total_profit: number;
   deals: MT5Deal[];
   is_partial_close: boolean;
+  is_still_open: boolean;
+}
+
+export interface MT5AggregationResult {
+  closedPositions: AggregatedPosition[];
+  openPositions: AggregatedPosition[];
 }
 
 /**
- * Group deals by position_id or ticket
+ * Classify whether a deal is an entry ('in'), exit ('out'), or reversal ('inout')
+ * IMPORTANT: Direction ('buy'/'sell') does NOT equal entry/exit!
+ * Closing a short position is deal side 'buy' with entry 'out'!
+ */
+export function classifyDealDirection(deal: MT5Deal): 'in' | 'out' | 'inout' {
+  const rawEntry = (deal.entry || deal.type || '').toLowerCase().trim();
+
+  // Explicit MT5 Entry field ('in', 'out', 'inout')
+  if (rawEntry === 'in' || rawEntry === 'entry') {
+    return 'in';
+  }
+  if (rawEntry === 'out' || rawEntry === 'exit') {
+    return 'out';
+  }
+  if (rawEntry === 'inout' || rawEntry === 'in/out') {
+    return 'inout';
+  }
+
+  // If no explicit Entry field is present (fallback inference from profit and comment)
+  if (deal.profit !== 0) {
+    // Only exit deals in MT5 realize profit/loss
+    return 'out';
+  }
+
+  if (deal.comment && /close|tp|sl|out/i.test(deal.comment)) {
+    return 'out';
+  }
+
+  return 'in';
+}
+
+/**
+ * Group deals by position identifier
  */
 function groupDealsByPosition(deals: MT5Deal[]): Map<string, MT5Deal[]> {
   const groups = new Map<string, MT5Deal[]>();
 
   for (const deal of deals) {
-    // Use position_id if available, otherwise use ticket
-    const key = deal.position_id || deal.ticket || `unknown-${Math.random()}`;
-    
+    const key = deal.position_id || deal.order_id || deal.ticket || `pos-${deal.symbol}-${deal.datetime}`;
     if (!groups.has(key)) {
       groups.set(key, []);
     }
@@ -60,100 +107,114 @@ function groupDealsByPosition(deals: MT5Deal[]): Map<string, MT5Deal[]> {
 }
 
 /**
- * Classify a deal as entry or exit
- */
-function classifyDeal(deal: MT5Deal): 'entry' | 'exit' {
-  const type = deal.type.toLowerCase();
-  
-  // Explicit entry types
-  if (type === 'entry' || type === 'in' || type === 'buy') {
-    return 'entry';
-  }
-  
-  // Explicit exit types
-  if (type === 'exit' || type === 'out' || type === 'sell') {
-    return 'exit';
-  }
-  
-  // For generic 'deal' type, we need to infer from context
-  // This will be handled in aggregation logic
-  return 'entry'; // Default
-}
-
-/**
  * Aggregate MT5 deals into logical positions
  */
-export function aggregateMT5Positions(deals: MT5Deal[]): AggregatedPosition[] {
+export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResult {
   const positionGroups = groupDealsByPosition(deals);
-  const positions: AggregatedPosition[] = [];
+  const closedPositions: AggregatedPosition[] = [];
+  const openPositions: AggregatedPosition[] = [];
 
   for (const [positionKey, positionDeals] of positionGroups.entries()) {
     if (positionDeals.length === 0) continue;
 
-    // Separate entry and exit deals
-    const entryDeals: MT5Deal[] = [];
-    const exitDeals: MT5Deal[] = [];
+    // Sort chronologically by datetime
+    const sortedDeals = [...positionDeals].sort(
+      (a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime()
+    );
 
-    for (const deal of positionDeals) {
-      const dealType = classifyDeal(deal);
-      if (dealType === 'entry') {
-        entryDeals.push(deal);
+    const inDeals: MT5Deal[] = [];
+    const outDeals: MT5Deal[] = [];
+
+    for (const deal of sortedDeals) {
+      const classification = classifyDealDirection(deal);
+      if (classification === 'in') {
+        inDeals.push(deal);
+      } else if (classification === 'out') {
+        outDeals.push(deal);
       } else {
-        exitDeals.push(deal);
+        // inout (reversal)
+        outDeals.push(deal);
       }
     }
 
-    // If no explicit classification, use first deal as entry, rest as exits
-    if (entryDeals.length === 0 && positionDeals.length > 0) {
-      entryDeals.push(positionDeals[0]);
-      exitDeals.push(...positionDeals.slice(1));
+    // Fallback: If no explicit 'in' detected, earliest deal is entry
+    if (inDeals.length === 0 && sortedDeals.length > 0) {
+      inDeals.push(sortedDeals[0]);
+      outDeals.push(...sortedDeals.slice(1));
     }
 
-    if (entryDeals.length === 0) {
-      // No entry deals - skip this position
-      console.warn(`Position ${positionKey} has no entry deals`);
+    const totalEntryVolume = inDeals.reduce((sum, d) => sum + d.volume, 0);
+    const totalExitVolume = outDeals.reduce((sum, d) => sum + d.volume, 0);
+
+    // If totalExitVolume === 0, this position has NOT been closed at all!
+    if (totalExitVolume === 0) {
+      const weightedEntryPrice =
+        totalEntryVolume > 0
+          ? inDeals.reduce((sum, d) => sum + d.price * d.volume, 0) / totalEntryVolume
+          : inDeals[0]?.price || 0;
+
+      const openPos: AggregatedPosition = {
+        ticket: sortedDeals[0].ticket || positionKey,
+        position_id: positionKey,
+        symbol: sortedDeals[0].symbol,
+        side: inDeals[0]?.side || sortedDeals[0].side,
+        total_volume: totalEntryVolume,
+        closed_volume: 0,
+        remaining_open_volume: totalEntryVolume,
+        entry_datetime: inDeals[0]?.datetime || sortedDeals[0].datetime,
+        exit_datetime: '',
+        weighted_entry_price: weightedEntryPrice,
+        weighted_exit_price: 0,
+        total_commission: sortedDeals.reduce((sum, d) => sum + (d.commission || 0), 0),
+        total_swap: sortedDeals.reduce((sum, d) => sum + (d.swap || 0), 0),
+        total_profit: sortedDeals.reduce((sum, d) => sum + (d.profit || 0), 0),
+        deals: sortedDeals,
+        is_partial_close: false,
+        is_still_open: true,
+      };
+      openPositions.push(openPos);
       continue;
     }
 
-    // Calculate aggregated values
-    const totalEntryVolume = entryDeals.reduce((sum, d) => sum + d.volume, 0);
-    const totalExitVolume = exitDeals.reduce((sum, d) => sum + d.volume, 0);
-    const totalVolume = Math.max(totalEntryVolume, totalExitVolume);
+    // Weighted average entry price across all 'in' deals
+    const weightedEntryPrice =
+      totalEntryVolume > 0
+        ? inDeals.reduce((sum, d) => sum + d.price * d.volume, 0) / totalEntryVolume
+        : inDeals[0]?.price || outDeals[0]?.price || 0;
 
-    // Weighted average entry price
-    const weightedEntryPrice = entryDeals.reduce((sum, d) => sum + (d.price * d.volume), 0) / totalEntryVolume;
-    
-    // Weighted average exit price (if exits exist)
-    const weightedExitPrice = exitDeals.length > 0
-      ? exitDeals.reduce((sum, d) => sum + (d.price * d.volume), 0) / totalExitVolume
-      : weightedEntryPrice; // If no exits, use entry price
+    // Weighted average exit price across all 'out' deals
+    const weightedExitPrice =
+      totalExitVolume > 0
+        ? outDeals.reduce((sum, d) => sum + d.price * d.volume, 0) / totalExitVolume
+        : weightedEntryPrice;
 
-    // Total commission, swap, profit
-    const totalCommission = positionDeals.reduce((sum, d) => sum + d.commission, 0);
-    const totalSwap = positionDeals.reduce((sum, d) => sum + d.swap, 0);
-    const totalProfit = positionDeals.reduce((sum, d) => sum + d.profit, 0);
+    // Financial sums
+    const totalCommission = sortedDeals.reduce((sum, d) => sum + (d.commission || 0), 0);
+    const totalSwap = sortedDeals.reduce((sum, d) => sum + (d.swap || 0), 0);
+    const totalProfit = sortedDeals.reduce((sum, d) => sum + (d.profit || 0), 0);
 
-    // Entry and exit datetimes
-    const entryDatetimes = entryDeals.map(d => new Date(d.datetime).getTime());
-    const exitDatetimes = exitDeals.map(d => new Date(d.datetime).getTime());
-    
+    // Timestamps
+    const entryDatetimes = inDeals.map(d => new Date(d.datetime).getTime());
+    const exitDatetimes = outDeals.map(d => new Date(d.datetime).getTime());
     const entryDatetime = new Date(Math.min(...entryDatetimes)).toISOString();
-    const exitDatetime = exitDatetimes.length > 0
-      ? new Date(Math.max(...exitDatetimes)).toISOString()
-      : entryDatetime;
+    const exitDatetime = new Date(Math.max(...exitDatetimes)).toISOString();
 
-    // Determine position side from first entry deal
-    const side = entryDeals[0].side;
+    // Position side is established by the entry deal
+    const side = inDeals[0]?.side || (outDeals[0]?.side === 'buy' ? 'sell' : 'buy');
 
-    // Check if this is a partial close
-    const isPartialClose = totalExitVolume > 0 && totalExitVolume < totalEntryVolume;
+    // Partial close detection: closed volume is less than entered volume
+    const isPartialClose = totalExitVolume < totalEntryVolume;
+    const remainingOpenVolume = Math.max(0, totalEntryVolume - totalExitVolume);
+    const closedVolume = Math.min(totalEntryVolume, totalExitVolume);
 
-    positions.push({
-      ticket: positionDeals[0].ticket || positionKey,
+    const position: AggregatedPosition = {
+      ticket: sortedDeals[0].ticket || positionKey,
       position_id: positionKey,
-      symbol: positionDeals[0].symbol,
+      symbol: sortedDeals[0].symbol,
       side,
-      total_volume: totalVolume,
+      total_volume: totalEntryVolume > 0 ? totalEntryVolume : closedVolume,
+      closed_volume: closedVolume,
+      remaining_open_volume: remainingOpenVolume,
       entry_datetime: entryDatetime,
       exit_datetime: exitDatetime,
       weighted_entry_price: weightedEntryPrice,
@@ -161,12 +222,23 @@ export function aggregateMT5Positions(deals: MT5Deal[]): AggregatedPosition[] {
       total_commission: totalCommission,
       total_swap: totalSwap,
       total_profit: totalProfit,
-      deals: positionDeals,
+      deals: sortedDeals,
       is_partial_close: isPartialClose,
-    });
+      is_still_open: false,
+    };
+
+    closedPositions.push(position);
   }
 
-  return positions;
+  return { closedPositions, openPositions };
+}
+
+/**
+ * Backward compatible aggregateMT5Positions
+ */
+export function aggregateMT5Positions(deals: MT5Deal[]): AggregatedPosition[] {
+  const result = aggregateMT5DealsDetailed(deals);
+  return result.closedPositions;
 }
 
 /**
@@ -178,23 +250,23 @@ export function positionToNormalizedTrade(position: AggregatedPosition): Normali
     position_id: position.position_id,
     symbol: position.symbol,
     side: position.side,
-    volume: position.total_volume,
+    volume: position.closed_volume || position.total_volume,
     entry_datetime: position.entry_datetime,
     entry_price: position.weighted_entry_price,
-    stop_loss: null, // Not available in MT5 deals
-    take_profit: null, // Not available in MT5 deals
+    stop_loss: null,
+    take_profit: null,
     exit_datetime: position.exit_datetime,
     exit_price: position.weighted_exit_price,
     commission: position.total_commission,
     swap: position.total_swap,
     profit: position.total_profit,
-    comment: position.deals[0]?.comment || null,
-    magic_number: position.deals[0]?.magic_number || null,
+    comment: position.deals.find(d => d.comment)?.comment || null,
+    magic_number: position.deals.find(d => d.magic_number !== undefined)?.magic_number || null,
   };
 }
 
 /**
- * Process MT5 deals and return normalized trades
+ * Process MT5 deals and return normalized trades for closed positions
  */
 export function processMT5Deals(deals: MT5Deal[]): NormalizedTrade[] {
   const positions = aggregateMT5Positions(deals);

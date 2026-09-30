@@ -16,7 +16,7 @@ export async function getPhases(accountId: string, userId: string): Promise<Acco
     .maybeSingle();
 
   if (accountError || !account) {
-    return MockStorage.getPhases(accountId);
+    throw new Error('حساب معاملاتی یافت نشد یا دسترسی مجاز نیست');
   }
 
   const { data, error } = await supabase
@@ -26,8 +26,7 @@ export async function getPhases(accountId: string, userId: string): Promise<Acco
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching phases:', error);
-    return MockStorage.getPhases(accountId);
+    throw new Error(`خطا در دریافت فازهای حساب: ${error.message}`);
   }
 
   return data || [];
@@ -47,9 +46,7 @@ export async function getPhase(phaseId: string, userId: string): Promise<Account
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching phase:', error);
-    const all = await MockStorage.getPhases();
-    return all.find(p => p.id === phaseId) || null;
+    throw new Error(`خطا در دریافت اطلاعات فاز: ${error.message}`);
   }
 
   return data;
@@ -75,6 +72,18 @@ export async function createPhase(input: AccountPhaseInsert, userId: string): Pr
     return newPhase;
   }
 
+  // Ensure account belongs to user
+  const { data: account } = await supabase
+    .from('trading_accounts')
+    .select('id')
+    .eq('id', input.account_id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!account) {
+    throw new Error('حساب معاملاتی متعلق به کاربر نیست');
+  }
+
   const { data, error } = await supabase
     .from('account_phases')
     .insert(input)
@@ -82,8 +91,7 @@ export async function createPhase(input: AccountPhaseInsert, userId: string): Pr
     .single();
 
   if (error) {
-    console.error('Error creating phase:', error);
-    throw new Error('خطا در ایجاد فاز');
+    throw new Error(`خطا در ایجاد فاز: ${error.message}`);
   }
 
   return data;
@@ -100,6 +108,12 @@ export async function updatePhase(
     return { ...p, ...input, updated_at: new Date().toISOString() } as AccountPhase;
   }
 
+  // Verify phase ownership through account
+  const existing = await getPhase(phaseId, userId);
+  if (!existing) {
+    throw new Error('فاز مورد نظر یافت نشد');
+  }
+
   const { data, error } = await supabase
     .from('account_phases')
     .update({ ...input, updated_at: new Date().toISOString() })
@@ -108,8 +122,7 @@ export async function updatePhase(
     .single();
 
   if (error) {
-    console.error('Error updating phase:', error);
-    throw new Error('خطا در بروزرسانی فاز');
+    throw new Error(`خطا در بروزرسانی فاز: ${error.message}`);
   }
 
   return data;
@@ -120,12 +133,17 @@ export async function deletePhase(phaseId: string, userId: string): Promise<void
     return;
   }
 
+  const existing = await getPhase(phaseId, userId);
+  if (!existing) {
+    throw new Error('فاز مورد نظر یافت نشد');
+  }
+
   const { error } = await supabase
     .from('account_phases')
     .delete()
     .eq('id', phaseId);
 
   if (error) {
-    console.error('Error deleting phase:', error);
+    throw new Error(`خطا در حذف فاز: ${error.message}`);
   }
 }

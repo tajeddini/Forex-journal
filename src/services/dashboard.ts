@@ -23,9 +23,7 @@ export async function getDashboardLayouts(userId: string): Promise<DashboardLayo
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching dashboard layouts:', error);
-    const layout = await MockStorage.getDefaultDashboardLayout(userId);
-    return [layout];
+    throw new Error(`خطا در دریافت چیدمان‌های داشبورد: ${error.message}`);
   }
 
   return data || [];
@@ -47,8 +45,7 @@ export async function getDefaultDashboardLayout(userId: string): Promise<Dashboa
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching default dashboard layout:', error);
-    return MockStorage.getDefaultDashboardLayout(userId);
+    throw new Error(`خطا در دریافت چیدمان پیش‌فرض: ${error.message}`);
   }
 
   return data;
@@ -78,8 +75,7 @@ export async function createDashboardLayout(input: DashboardLayoutInsert): Promi
     .single();
 
   if (error) {
-    console.error('Error creating dashboard layout:', error);
-    throw new Error('خطا در ایجاد چیدمان داشبورد');
+    throw new Error(`خطا در ایجاد چیدمان داشبورد: ${error.message}`);
   }
 
   return data;
@@ -112,9 +108,7 @@ export async function updateDashboardLayout(
     .single();
 
   if (error) {
-    console.error('Error updating dashboard layout:', error);
-    const existing = await MockStorage.getDefaultDashboardLayout(userId);
-    return existing;
+    throw new Error(`خطا در به‌روزرسانی چیدمان داشبورد: ${error.message}`);
   }
 
   return data;
@@ -135,7 +129,7 @@ export async function deleteDashboardLayout(layoutId: string, userId: string): P
     .eq('user_id', userId);
 
   if (error) {
-    console.error('Error deleting dashboard layout:', error);
+    throw new Error(`خطا در حذف چیدمان داشبورد: ${error.message}`);
   }
 }
 

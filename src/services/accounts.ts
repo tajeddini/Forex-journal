@@ -14,8 +14,7 @@ export async function getAccounts(userId: string): Promise<TradingAccount[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching accounts:', error);
-    return MockStorage.getAccounts(userId);
+    throw new Error(`خطا در دریافت حساب‌های معاملاتی: ${error.message}`);
   }
 
   return data || [];
@@ -34,8 +33,7 @@ export async function getAccount(accountId: string, userId: string): Promise<Tra
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching account:', error);
-    return MockStorage.getAccount(accountId, userId);
+    throw new Error(`خطا در دریافت اطلاعات حساب: ${error.message}`);
   }
 
   return data;
@@ -53,8 +51,7 @@ export async function createAccount(input: TradingAccountInsert): Promise<Tradin
     .single();
 
   if (error) {
-    console.error('Error creating account:', error);
-    return MockStorage.createAccount(input);
+    throw new Error(`خطا در ایجاد حساب معاملاتی: ${error.message}`);
   }
 
   return data;
@@ -78,8 +75,7 @@ export async function updateAccount(
     .single();
 
   if (error) {
-    console.error('Error updating account:', error);
-    return MockStorage.updateAccount(accountId, input);
+    throw new Error(`خطا در به‌روزرسانی حساب: ${error.message}`);
   }
 
   return data;
@@ -97,8 +93,7 @@ export async function deleteAccount(accountId: string, userId: string): Promise<
     .eq('user_id', userId);
 
   if (error) {
-    console.error('Error deleting account:', error);
-    return MockStorage.deleteAccount(accountId);
+    throw new Error(`خطا در حذف حساب معاملاتی: ${error.message}`);
   }
 }
 
@@ -114,8 +109,7 @@ export async function getAccountCount(userId: string): Promise<number> {
     .eq('user_id', userId);
 
   if (error) {
-    const list = await MockStorage.getAccounts(userId);
-    return list.length;
+    throw new Error(`خطا در شمارش حساب‌ها: ${error.message}`);
   }
 
   return count || 0;

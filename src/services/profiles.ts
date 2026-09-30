@@ -14,8 +14,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching profile:', error);
-    return MockStorage.getProfile(userId);
+    throw new Error(`خطا در دریافت پروفایل کاربری: ${error.message}`);
   }
 
   return data;
@@ -33,8 +32,7 @@ export async function createProfile(input: ProfileInsert): Promise<Profile> {
     .single();
 
   if (error) {
-    console.error('Error creating profile:', error);
-    return MockStorage.getProfile(input.id);
+    throw new Error(`خطا در ایجاد پروفایل کاربری: ${error.message}`);
   }
 
   return data;
@@ -53,8 +51,7 @@ export async function updateProfile(userId: string, input: ProfileUpdate): Promi
     .single();
 
   if (error) {
-    console.error('Error updating profile:', error);
-    return MockStorage.getProfile(userId);
+    throw new Error(`خطا در به‌روزرسانی پروفایل کاربری: ${error.message}`);
   }
 
   return data;

@@ -1,13 +1,14 @@
 // ============================================================
 // Supabase Storage Provider
 // Implementation of StorageProvider using Supabase Storage
+// Strictly surfaces real storage errors without silent fake success
 // ============================================================
 
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { STORAGE_CONFIG } from '../../config/storage';
 import type { StorageProvider } from './types';
 
-// In-memory/localStorage map for local fallback
+// In-memory map for local guest/demo fallback
 const localFileStore = new Map<string, string>();
 
 export class SupabaseStorageProvider implements StorageProvider {
@@ -25,7 +26,6 @@ export class SupabaseStorageProvider implements StorageProvider {
     const { path, file, contentType } = params;
 
     if (!isSupabaseConfigured) {
-      // Local fallback: create object URL
       const url = URL.createObjectURL(file);
       localFileStore.set(path, url);
       return { path, size: file.size };
@@ -39,10 +39,7 @@ export class SupabaseStorageProvider implements StorageProvider {
       });
 
     if (error) {
-      console.error('Supabase Storage upload error:', error);
-      const url = URL.createObjectURL(file);
-      localFileStore.set(path, url);
-      return { path, size: file.size };
+      throw new Error(`خطا در آپلود فایل در فضای ابری: ${error.message}`);
     }
 
     return {
@@ -60,7 +57,7 @@ export class SupabaseStorageProvider implements StorageProvider {
       .remove([path]);
 
     if (error) {
-      console.error('Supabase Storage delete error:', error);
+      throw new Error(`خطا در حذف تصویر از فضای ابری: ${error.message}`);
     }
   }
 
@@ -74,7 +71,7 @@ export class SupabaseStorageProvider implements StorageProvider {
       .createSignedUrl(path, expirySeconds);
 
     if (error) {
-      return localFileStore.get(path) || '';
+      throw new Error(`خطا در دریافت لینک تصویر: ${error.message}`);
     }
 
     return data.signedUrl;
@@ -85,23 +82,19 @@ export class SupabaseStorageProvider implements StorageProvider {
       return localFileStore.has(path);
     }
 
-    try {
-      const { data, error } = await supabase.storage
-        .from(this.bucketName)
-        .list(path.split('/').slice(0, -1).join('/'), {
-          limit: 1,
-          offset: 0,
-          search: path.split('/').pop(),
-        });
+    const { data, error } = await supabase.storage
+      .from(this.bucketName)
+      .list(path.split('/').slice(0, -1).join('/'), {
+        limit: 1,
+        offset: 0,
+        search: path.split('/').pop(),
+      });
 
-      if (error) {
-        return localFileStore.has(path);
-      }
-
-      return data.length > 0;
-    } catch {
-      return localFileStore.has(path);
+    if (error) {
+      throw new Error(`خطا در بررسی وجود تصویر: ${error.message}`);
     }
+
+    return (data || []).length > 0;
   }
 }
 

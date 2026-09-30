@@ -40,14 +40,14 @@ function mockTrade(overrides: Partial<Trade> = {}): Trade {
 }
 
 describe('analyzeByHour', () => {
-  it('groups trades by hour correctly', () => {
+  it('groups trades by hour correctly in UTC', () => {
     const trades = classifyTrades([
       mockTrade({ entry_datetime: '2024-01-01T10:00:00Z', profit: 100 }),
       mockTrade({ entry_datetime: '2024-01-01T10:30:00Z', profit: 50 }),
       mockTrade({ entry_datetime: '2024-01-01T14:00:00Z', profit: -30 }),
     ]);
 
-    const result = analyzeByHour(trades);
+    const result = analyzeByHour(trades, 'UTC');
 
     expect(result).toHaveLength(24);
     
@@ -58,6 +58,18 @@ describe('analyzeByHour', () => {
     const hour14 = result.find(h => h.hour === 14);
     expect(hour14?.trades).toBe(1);
     expect(hour14?.netPnl).toBe(-30);
+  });
+
+  it('shifts hours according to specified timezone (e.g. Asia/Tehran UTC+3:30)', () => {
+    const trades = classifyTrades([
+      mockTrade({ entry_datetime: '2024-01-01T10:00:00Z', profit: 100 }),
+    ]);
+
+    const resultTehran = analyzeByHour(trades, 'Asia/Tehran');
+    // 10:00 UTC is 13:30 in Tehran => hour 13
+    const hour13 = resultTehran.find(h => h.hour === 13);
+    expect(hour13?.trades).toBe(1);
+    expect(hour13?.netPnl).toBe(100);
   });
 
   it('handles empty trades', () => {

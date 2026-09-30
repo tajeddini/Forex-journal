@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getReviews, createReview, updateReview, deleteReview, getReviewPeriod } from '../../services/reviews';
+import { getReviews, createReview, updateReview, deleteReview, getReviewPeriod, computeReviewStats } from '../../services/reviews';
 import { getAccounts } from '../../services/accounts';
 import type { TradingReview, ReviewType, TradingAccount } from '../../types/database';
 import { REVIEW_TYPES } from '../../types/database';
@@ -115,22 +115,46 @@ export default function ReviewsPage() {
     try {
       const date = new Date(formData.review_date);
       const period = getReviewPeriod(formData.review_type, date);
+      const periodStart = period.start.toISOString().split('T')[0];
+      const periodEnd = period.end.toISOString().split('T')[0];
+
+      // Calculate real statistics for this period and account
+      let stats = {
+        total_trades: 0,
+        net_pnl: 0,
+        win_rate: null as number | null,
+        profit_factor: null as number | null,
+        expectancy: null as number | null,
+        avg_duration: null as number | null,
+      };
+
+      try {
+        stats = await computeReviewStats(
+          user.id,
+          periodStart,
+          periodEnd,
+          formData.account_id || null,
+          null
+        );
+      } catch {
+        // Fall back gracefully if trade calculation is unavailable
+      }
       
       const reviewData = {
         user_id: user.id,
         review_type: formData.review_type,
         review_date: formData.review_date,
-        period_start: period.start.toISOString().split('T')[0],
-        period_end: period.end.toISOString().split('T')[0],
+        period_start: periodStart,
+        period_end: periodEnd,
         account_id: formData.account_id || null,
         phase_id: null,
-        total_trades: 0,
-        net_pnl: 0,
-        win_rate: null,
-        profit_factor: null,
-        expectancy: null,
+        total_trades: stats.total_trades,
+        net_pnl: stats.net_pnl,
+        win_rate: stats.win_rate,
+        profit_factor: stats.profit_factor,
+        expectancy: stats.expectancy,
         max_drawdown: null,
-        avg_duration: null,
+        avg_duration: stats.avg_duration,
         summary: formData.summary || null,
         what_went_well: formData.what_went_well || null,
         what_went_wrong: formData.what_went_wrong || null,

@@ -7,6 +7,7 @@ import type { ClassifiedTrade } from './types';
 import type { CoreMetrics, EquityCurve, DrawdownMetrics } from './types';
 import { calculateCoreMetrics } from './metrics';
 import { calculateEquityCurve, calculateDrawdown } from './equity';
+import { getZonedHour, getZonedPersianDayOfWeek, DEFAULT_TIMEZONE } from '../../utils/timezone';
 
 // --- Scenario Condition Types ---
 
@@ -60,20 +61,14 @@ export interface WhatIfResult {
 
 // --- Filter Functions ---
 
-function getDayOfWeek(datetime: string): number {
-  const date = new Date(datetime);
-  const day = date.getDay(); // 0=Sunday, 6=Saturday
-  return (day + 1) % 7; // Convert to Persian (0=Saturday, 6=Friday)
-}
-
-function getHour(datetime: string): number {
-  return new Date(datetime).getHours();
-}
-
 /**
  * Check if a trade matches a condition
  */
-function tradeMatchesCondition(trade: ClassifiedTrade, condition: WhatIfCondition): boolean {
+function tradeMatchesCondition(
+  trade: ClassifiedTrade,
+  condition: WhatIfCondition,
+  timeZone: string = DEFAULT_TIMEZONE
+): boolean {
   const { type, operator, value } = condition;
 
   switch (type) {
@@ -88,11 +83,11 @@ function tradeMatchesCondition(trade: ClassifiedTrade, condition: WhatIfConditio
       return operator === 'equals' ? strategyId === value : strategyId !== value;
     
     case 'day_of_week':
-      const day = getDayOfWeek(trade.entry_datetime);
+      const day = getZonedPersianDayOfWeek(trade.entry_datetime, timeZone);
       return operator === 'equals' ? day === value : day !== value;
     
     case 'hour':
-      const hour = getHour(trade.entry_datetime);
+      const hour = getZonedHour(trade.entry_datetime, timeZone);
       if (operator === 'in_range') {
         const [min, max] = value;
         return hour >= min && hour <= max;
@@ -132,7 +127,8 @@ function tradeMatchesCondition(trade: ClassifiedTrade, condition: WhatIfConditio
  */
 export function applyWhatIfScenario(
   trades: ClassifiedTrade[],
-  scenario: WhatIfScenario
+  scenario: WhatIfScenario,
+  timeZone: string = DEFAULT_TIMEZONE
 ): ClassifiedTrade[] {
   if (scenario.conditions.length === 0) {
     return trades;
@@ -141,7 +137,7 @@ export function applyWhatIfScenario(
   return trades.filter(trade => {
     // Trade must match ALL conditions to be excluded
     const matchesAll = scenario.conditions.every(condition => 
-      tradeMatchesCondition(trade, condition)
+      tradeMatchesCondition(trade, condition, timeZone)
     );
     // Return trades that DON'T match (i.e., not excluded)
     return !matchesAll;
@@ -154,10 +150,11 @@ export function applyWhatIfScenario(
 export function calculateWhatIf(
   originalTrades: ClassifiedTrade[],
   scenario: WhatIfScenario,
-  startingBalance: number
+  startingBalance: number,
+  timeZone: string = DEFAULT_TIMEZONE
 ): WhatIfResult {
   // Apply scenario
-  const remainingTrades = applyWhatIfScenario(originalTrades, scenario);
+  const remainingTrades = applyWhatIfScenario(originalTrades, scenario, timeZone);
   const excludedCount = originalTrades.length - remainingTrades.length;
 
   // Calculate metrics for both datasets

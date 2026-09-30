@@ -3,35 +3,56 @@ import type { Trade } from '../types/database';
 
 // ============================================================
 // Duplicate Detection
+// Source-aware and broker-identity-aware fingerprinting
 // ============================================================
 
+export interface DuplicateTradeInfo {
+  trade: Trade | NormalizedTrade;
+  reason: string;
+}
+
 /**
- * Generate a fingerprint for a trade
- * Used to detect duplicate imports
+ * Generate a robust fingerprint for a trade.
+ * For MT5 / MT4: uses broker identifiers (position_id / ticket) combined with account and symbol.
+ * For manual trades: uses full composite attributes including comments to prevent false collision
+ * between legitimate trades with identical entry prices.
  */
 export function generateTradeFingerprint(trade: NormalizedTrade | Trade): string {
-  // Use strong identifiers if available
-  if (trade.ticket) {
-    return `ticket:${trade.ticket}:${trade.symbol}:${trade.entry_datetime}`;
+  const accountId = 'account_id' in trade ? trade.account_id || '' : '';
+  const source = 'source' in trade ? trade.source : undefined;
+
+  // 1. MT5: Position ID is the definitive broker position identifier
+  if (trade.position_id) {
+    return `mt5:pos:${accountId}:${trade.symbol.toUpperCase()}:${trade.position_id}`;
   }
 
-  // Fallback to composite fingerprint
+  // 2. MT4 / Deal Ticket: Ticket is the broker order/deal identifier
+  if (trade.ticket) {
+    return `ticket:${accountId}:${trade.symbol.toUpperCase()}:${trade.ticket}`;
+  }
+
+  // 3. Fallback for manual or identifier-less trades:
+  // Use high-precision composite key: symbol, side, volume, entry, exit, prices, profit, comment
+  const comment = trade.comment?.trim() || '';
   const parts = [
-    trade.symbol,
+    source || 'manual',
+    accountId,
+    trade.symbol.toUpperCase(),
     trade.side,
-    trade.volume,
+    Number(trade.volume).toFixed(4),
     trade.entry_datetime,
-    trade.entry_price,
+    Number(trade.entry_price).toFixed(5),
     trade.exit_datetime,
-    trade.exit_price,
-    trade.profit,
-  ].map(p => String(p).toLowerCase().trim());
+    Number(trade.exit_price).toFixed(5),
+    Number(trade.profit).toFixed(2),
+    comment,
+  ];
 
   return parts.join('|');
 }
 
 /**
- * Check if a trade is a duplicate of existing trades
+ * Check if newly imported trades collide with existing database trades
  */
 export function findDuplicates(
   newTrades: NormalizedTrade[],
@@ -59,7 +80,7 @@ export function findDuplicates(
 }
 
 /**
- * Find duplicates within the new trades themselves
+ * Find duplicates within the new trades file itself
  */
 export function findInternalDuplicates(trades: NormalizedTrade[]): Map<number, number[]> {
   const duplicates = new Map<number, number[]>();

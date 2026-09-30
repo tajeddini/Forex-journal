@@ -3,13 +3,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getAccounts } from '../../services/accounts';
 import { getPhases } from '../../services/accountPhases';
-import { createImportBatch, completeImportBatch } from '../../services/importBatches';
+import { createImportBatch, completeImportBatch, failImportBatch } from '../../services/importBatches';
 import { createTradesBatch, checkDuplicateTrades } from '../../services/trades';
 import type { TradingAccount, AccountPhase, TradeSource, TradeInsert } from '../../types/database';
 import { parseCSV, validateCSVFile, readFileAsText, detectDelimiter } from '../../utils/csv-parser';
-import { mapColumns, normalizeTradeRow, detectTradeSource, type NormalizedTrade } from '../../utils/trade-normalizer';
+import { mapColumns, normalizeTradeRow, detectTradeSource, parseMT5DealRow, type NormalizedTrade } from '../../utils/trade-normalizer';
 import { findDuplicates } from '../../utils/duplicate-detector';
-import { aggregateMT5Deals, type MT5Deal } from '../../utils/mt5-aggregation';
+import { aggregateMT5DealsDetailed, positionToNormalizedTrade, type MT5Deal } from '../../utils/mt5-aggregation';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
@@ -105,7 +105,7 @@ export default function ImportPage() {
       const delimiter = detectDelimiter(content);
       const parsed = parseCSV(content, { delimiter });
       const mapping = mapColumns(parsed.headers);
-      const source = detectTradeSource(file.name, parsed.headers);
+      const source = detectTradeSource(parsed.headers);
 
       setState(prev => ({
         ...prev,
@@ -123,63 +123,37 @@ export default function ImportPage() {
     }
   }, [toast]);
 
-  // Normalize and validate
+  // Normalize and validate with source-aware pipeline
   const handleProceedToPreview = useCallback(() => {
-    const normalizedTrades: NormalizedTrade[] = [];
     const invalidRows: { row: number; field: string; message: string }[] = [];
+    let finalTrades: NormalizedTrade[] = [];
 
-    // Step 1: Normalize all rows
-    for (let i = 0; i < state.rows.length; i++) {
-      const { trade, errors } = normalizeTradeRow(state.rows[i], state.columnMapping, i + 1);
-      if (trade) {
-        normalizedTrades.push(trade);
-      } else {
-        invalidRows.push(...errors);
+    if (state.source === 'mt5') {
+      const deals: MT5Deal[] = [];
+      for (let i = 0; i < state.rows.length; i++) {
+        const { deal, errors } = parseMT5DealRow(state.rows[i], i + 1);
+        if (deal) {
+          deals.push(deal);
+        } else {
+          invalidRows.push(...errors);
+        }
       }
-    }
 
-    // Step 2: If MT5 source, apply aggregation
-    let finalTrades = normalizedTrades;
-    if (state.source === 'mt5' && normalizedTrades.length > 0) {
-      try {
-        const mt5Deals: MT5Deal[] = normalizedTrades.map(t => ({
-          ticket: t.ticket || undefined,
-          position_id: t.position_id || undefined,
-          symbol: t.symbol,
-          side: t.side,
-          volume: t.volume,
-          price: t.entry_price,
-          datetime: t.entry_datetime,
-          commission: t.commission || 0,
-          swap: t.swap || 0,
-          profit: t.profit || 0,
-          type: 'deal',
-          comment: t.comment || undefined,
-          magic_number: t.magic_number ? Number(t.magic_number) : undefined,
-        }));
+      const { closedPositions, openPositions } = aggregateMT5DealsDetailed(deals);
+      finalTrades = closedPositions.map(positionToNormalizedTrade);
 
-        const aggregated = aggregateMT5Deals(mt5Deals);
-        
-        finalTrades = aggregated.map((pos: any) => ({
-          ticket: pos.ticket,
-          position_id: pos.position_id,
-          symbol: pos.symbol,
-          side: pos.side,
-          volume: pos.total_volume,
-          entry_datetime: pos.entry_datetime,
-          entry_price: pos.weighted_entry_price,
-          stop_loss: null,
-          take_profit: null,
-          exit_datetime: pos.exit_datetime,
-          exit_price: pos.weighted_exit_price,
-          commission: pos.total_commission,
-          swap: pos.total_swap,
-          profit: pos.total_profit,
-          comment: pos.deals?.[0]?.comment || null,
-          magic_number: pos.deals?.[0]?.magic_number || null,
-        }));
-      } catch (err) {
-        console.warn('MT5 aggregation failed, using raw trades:', err);
+      if (openPositions.length > 0) {
+        toast.info(`${openPositions.length} موقعیت باز شناسایی شد (معاملات باز در لیست معاملات بسته وارد نمی‌شوند).`);
+      }
+    } else {
+      // MT4 and generic closed-trade CSV
+      for (let i = 0; i < state.rows.length; i++) {
+        const { trade, errors } = normalizeTradeRow(state.rows[i], state.columnMapping, i + 1);
+        if (trade) {
+          finalTrades.push(trade);
+        } else {
+          invalidRows.push(...errors);
+        }
       }
     }
 
@@ -189,7 +163,7 @@ export default function ImportPage() {
       normalizedTrades: finalTrades,
       invalidRows,
     }));
-  }, [state.rows, state.columnMapping, state.source]);
+  }, [state.rows, state.columnMapping, state.source, toast]);
 
   // Check duplicates
   const checkForDuplicates = useCallback(async () => {
@@ -221,6 +195,8 @@ export default function ImportPage() {
     if (!state.account || !user || !state.file) return;
 
     setState(prev => ({ ...prev, step: 'importing' }));
+    let batchId: string | null = null;
+    let importedCount = 0;
 
     try {
       // Create import batch
@@ -239,6 +215,7 @@ export default function ImportPage() {
         status: 'processing',
         parser_version: '1.0.0',
       });
+      batchId = batch.id;
 
       // Filter out duplicates
       const tradesToImport = state.normalizedTrades.filter((_, index) => !state.duplicates.has(index));
@@ -270,9 +247,7 @@ export default function ImportPage() {
       }));
 
       // Batch insert (chunks of 500)
-      let importedCount = 0;
       const chunkSize = 500;
-      
       for (let i = 0; i < tradeInserts.length; i += chunkSize) {
         const chunk = tradeInserts.slice(i, i + chunkSize);
         await createTradesBatch(chunk);
@@ -307,7 +282,11 @@ export default function ImportPage() {
 
       toast.success('معاملات با موفقیت وارد شدند');
     } catch (err) {
-      toast.error('خطا در وارد کردن معاملات');
+      const errorMsg = err instanceof Error ? err.message : 'خطا در وارد کردن معاملات';
+      if (batchId) {
+        await failImportBatch(batchId, user.id, errorMsg, importedCount).catch(() => {});
+      }
+      toast.error(errorMsg);
       setState(prev => ({ ...prev, step: 'preview' }));
     }
   }, [state, user, toast]);

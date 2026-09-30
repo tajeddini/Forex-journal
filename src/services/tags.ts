@@ -13,7 +13,10 @@ export async function getTags(userId: string): Promise<Tag[]> {
     .eq('user_id', userId)
     .order('name');
 
-  if (error) return MockStorage.getTags();
+  if (error) {
+    throw new Error(`خطا در دریافت تگ‌ها: ${error.message}`);
+  }
+
   return data || [];
 }
 
@@ -35,7 +38,10 @@ export async function createTag(input: TagInsert): Promise<Tag> {
     .select()
     .single();
 
-  if (error) throw new Error('خطا در ایجاد تگ');
+  if (error) {
+    throw new Error(`خطا در ایجاد تگ: ${error.message}`);
+  }
+
   return data;
 }
 
@@ -54,7 +60,10 @@ export async function updateTag(id: string, userId: string, input: TagUpdate): P
     .select()
     .single();
 
-  if (error) throw new Error('خطا در بروزرسانی تگ');
+  if (error) {
+    throw new Error(`خطا در بروزرسانی تگ: ${error.message}`);
+  }
+
   return data;
 }
 
@@ -69,12 +78,14 @@ export async function deleteTag(id: string, userId: string): Promise<void> {
     .eq('id', id)
     .eq('user_id', userId);
 
-  if (error) throw new Error('خطا در حذف تگ');
+  if (error) {
+    throw new Error(`خطا در حذف تگ: ${error.message}`);
+  }
 }
 
 // Trade-Tag relationships
-export async function getTradeTags(tradeId: string): Promise<Tag[]> {
-  if (!isSupabaseConfigured) {
+export async function getTradeTags(tradeId: string, userId: string): Promise<Tag[]> {
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
     const tags = await MockStorage.getTags();
     return tags.slice(0, 2);
   }
@@ -85,42 +96,58 @@ export async function getTradeTags(tradeId: string): Promise<Tag[]> {
     .eq('trade_id', tradeId);
 
   if (error) {
-    const tags = await MockStorage.getTags();
-    return tags.slice(0, 2);
+    throw new Error(`خطا در دریافت تگ‌های معامله: ${error.message}`);
   }
+
   return (data || []).map((dt: any) => dt.tag);
 }
 
-export async function addTradeTag(tradeId: string, tagId: string): Promise<void> {
-  if (!isSupabaseConfigured) return;
-  await supabase.from('trade_tags').insert({ trade_id: tradeId, tag_id: tagId });
-}
+export async function addTradeTag(tradeId: string, tagId: string, userId: string): Promise<void> {
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') return;
 
-export async function removeTradeTag(tradeId: string, tagId: string): Promise<void> {
-  if (!isSupabaseConfigured) return;
-  await supabase.from('trade_tags').delete().eq('trade_id', tradeId).eq('tag_id', tagId);
-}
-
-export async function setTradeTags(tradeId: string, tagIds: string[]): Promise<void> {
-  if (!isSupabaseConfigured) return;
-  if (!Array.isArray(tagIds)) return;
-
-  const uniqueTagIds = [...new Set(tagIds)];
-  const { data: currentTags } = await supabase
+  const { error } = await supabase
     .from('trade_tags')
-    .select('tag_id')
+    .insert({ trade_id: tradeId, tag_id: tagId });
+
+  if (error) {
+    throw new Error(`خطا در افزودن تگ به معامله: ${error.message}`);
+  }
+}
+
+export async function removeTradeTag(tradeId: string, tagId: string, userId?: string): Promise<void> {
+  if (!isSupabaseConfigured || (userId && userId === 'guest-demo-user')) return;
+
+  const { error } = await supabase
+    .from('trade_tags')
+    .delete()
+    .eq('trade_id', tradeId)
+    .eq('tag_id', tagId);
+
+  if (error) {
+    throw new Error(`خطا در حذف تگ معامله: ${error.message}`);
+  }
+}
+
+export async function setTradeTags(tradeId: string, tagIds: string[], userId?: string): Promise<void> {
+  if (!isSupabaseConfigured || (userId && userId === 'guest-demo-user')) return;
+
+  const { error: deleteError } = await supabase
+    .from('trade_tags')
+    .delete()
     .eq('trade_id', tradeId);
 
-  const currentTagIds = new Set(currentTags?.map(t => t.tag_id) || []);
-  const newTagIds = new Set(uniqueTagIds);
-
-  const toAdd = uniqueTagIds.filter(id => !currentTagIds.has(id));
-  const toRemove = [...currentTagIds].filter(id => !newTagIds.has(id));
-
-  if (toAdd.length > 0) {
-    await supabase.from('trade_tags').insert(toAdd.map(tagId => ({ trade_id: tradeId, tag_id: tagId })));
+  if (deleteError) {
+    throw new Error(`خطا در پاکسازی تگ‌های قبلی معامله: ${deleteError.message}`);
   }
-  if (toRemove.length > 0) {
-    await supabase.from('trade_tags').delete().eq('trade_id', tradeId).in('tag_id', toRemove);
+
+  if (tagIds.length === 0) return;
+
+  const rows = tagIds.map(tagId => ({ trade_id: tradeId, tag_id: tagId }));
+  const { error: insertError } = await supabase
+    .from('trade_tags')
+    .insert(rows);
+
+  if (insertError) {
+    throw new Error(`خطا در ذخیره تگ‌های معامله: ${insertError.message}`);
   }
 }
