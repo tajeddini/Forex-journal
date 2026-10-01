@@ -11,7 +11,7 @@
 
 import type { NormalizedTrade } from './trade-normalizer';
 
-export type MT5DealType = 'in' | 'out' | 'inout' | 'entry' | 'exit' | 'deal';
+export type MT5DealType = 'in' | 'out' | 'inout' | 'out_by';
 
 export interface MT5Deal {
   ticket?: string;
@@ -27,7 +27,7 @@ export interface MT5Deal {
   swap: number;
   profit: number;
   type: MT5DealType | string;
-  entry?: string; // MT5 standard column: 'in', 'out', 'inout'
+  entry?: MT5DealType | string; // MT5 standard column: 'in', 'out', 'inout', 'out_by'
   comment?: string;
   magic_number?: number;
 }
@@ -58,25 +58,38 @@ export interface MT5AggregationResult {
 }
 
 /**
- * Classify whether a deal is an entry ('in'), exit ('out'), or reversal ('inout')
+ * Classify whether a deal is an entry ('in'), exit ('out'), reversal ('inout'), or close-by ('out_by')
  * IMPORTANT: Direction ('buy'/'sell') does NOT equal entry/exit!
  * Closing a short position is deal side 'buy' with entry 'out'!
  */
-export function classifyDealDirection(deal: MT5Deal): 'in' | 'out' | 'inout' {
+export function classifyDealDirection(deal: MT5Deal): 'in' | 'out' | 'inout' | 'out_by' {
   const rawEntry = (deal.entry || deal.type || '').toLowerCase().trim();
 
-  // Explicit MT5 Entry field ('in', 'out', 'inout')
-  if (rawEntry === 'in' || rawEntry === 'entry') {
+  // Explicit MT5 Entry field ('in', 'out', 'inout', 'out_by')
+  if (rawEntry === 'in' || rawEntry === 'entry' || rawEntry === 'deal_entry_in') {
     return 'in';
   }
-  if (rawEntry === 'out' || rawEntry === 'exit') {
+  if (rawEntry === 'out' || rawEntry === 'exit' || rawEntry === 'deal_entry_out') {
     return 'out';
   }
-  if (rawEntry === 'inout' || rawEntry === 'in/out') {
+  if (rawEntry === 'inout' || rawEntry === 'in/out' || rawEntry === 'deal_entry_inout') {
     return 'inout';
   }
+  if (
+    rawEntry === 'out_by' ||
+    rawEntry === 'out by' ||
+    rawEntry === 'outby' ||
+    rawEntry === 'deal_entry_out_by' ||
+    rawEntry === 'close by'
+  ) {
+    return 'out_by';
+  }
 
-  // If no explicit Entry field is present (fallback inference from profit and comment)
+  // Fallback inference from comment / profit if entry column was omitted
+  if (deal.comment && /close by/i.test(deal.comment)) {
+    return 'out_by';
+  }
+
   if (deal.profit !== 0) {
     // Only exit deals in MT5 realize profit/loss
     return 'out';
@@ -227,7 +240,7 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
           activePos.inDeals.push(deal);
           activePos.openVolume += deal.volume;
         }
-      } else if (semantic === 'out') {
+      } else if (semantic === 'out' || semantic === 'out_by') {
         if (!activePos || activePos.openVolume <= 0.000001) {
           // Out deal without preceding in deal in export range
           const syntheticIn: MT5Deal = {
@@ -355,6 +368,12 @@ export function aggregateMT5Positions(deals: MT5Deal[]): AggregatedPosition[] {
  * Convert aggregated position to NormalizedTrade format
  */
 export function positionToNormalizedTrade(position: AggregatedPosition): NormalizedTrade {
+  const hasOutBy = position.deals.some(d => d.entry === 'out_by');
+  const rawComment = position.deals.find(d => d.comment)?.comment || null;
+  const comment = hasOutBy
+    ? (rawComment ? (rawComment.includes('Close By') || rawComment.includes('close by') ? rawComment : `[Close By] ${rawComment}`) : '[Close By]')
+    : rawComment;
+
   return {
     ticket: position.ticket,
     position_id: position.position_id,
@@ -370,7 +389,7 @@ export function positionToNormalizedTrade(position: AggregatedPosition): Normali
     commission: position.total_commission,
     swap: position.total_swap,
     profit: position.total_profit,
-    comment: position.deals.find(d => d.comment)?.comment || null,
+    comment,
     magic_number: position.deals.find(d => d.magic_number !== undefined)?.magic_number || null,
   };
 }

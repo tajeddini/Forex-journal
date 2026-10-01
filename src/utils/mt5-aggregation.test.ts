@@ -389,6 +389,111 @@ describe('MT5 Aggregation Engine', () => {
       expect(pos.closed_volume).toBe(1.0);
       expect(pos.total_profit).toBe(100); // Not 200
     });
+
+    it('supports DEAL_ENTRY_OUT_BY closing a position by an opposite position (Close By)', () => {
+      // Position 1: BUY 1.00 lot @ 1.1000
+      // Position 2: SELL 1.00 lot @ 1.1080 (held in hedging)
+      // Close By executed: OUT_BY deal closes Position 1 against Position 2
+      const deals: MT5Deal[] = [
+        {
+          position_id: 'POS_CLOSE_BY_1',
+          symbol: 'EURUSD',
+          side: 'buy',
+          volume: 1.0,
+          price: 1.1000,
+          datetime: '2024-01-08T10:00:00Z',
+          commission: -5,
+          swap: 0,
+          profit: 0,
+          type: 'in',
+          entry: 'in',
+        },
+        {
+          position_id: 'POS_CLOSE_BY_1',
+          symbol: 'EURUSD',
+          side: 'sell',
+          volume: 1.0,
+          price: 1.1050,
+          datetime: '2024-01-08T12:00:00Z',
+          commission: 0,
+          swap: 0,
+          profit: 500,
+          type: 'out_by',
+          entry: 'out_by',
+          comment: 'close by #8888',
+        },
+      ];
+
+      const result = aggregateMT5DealsDetailed(deals);
+      expect(result.closedPositions).toHaveLength(1);
+      const pos = result.closedPositions[0];
+      expect(pos.closed_volume).toBe(1.0);
+      expect(pos.weighted_entry_price).toBe(1.1000);
+      expect(pos.weighted_exit_price).toBe(1.1050);
+      expect(pos.total_profit).toBe(500);
+
+      const normalized = positionToNormalizedTrade(pos);
+      expect(normalized.comment).toContain('close by #8888');
+    });
+
+    it('supports partial OUT_BY and duplicate OUT_BY deals without double-counting', () => {
+      const deals: MT5Deal[] = [
+        {
+          deal_id: 'DEAL_IN_1',
+          position_id: 'POS_PART_OUT_BY',
+          symbol: 'EURUSD',
+          side: 'buy',
+          volume: 2.0,
+          price: 1.1000,
+          datetime: '2024-01-09T08:00:00Z',
+          commission: -10,
+          swap: 0,
+          profit: 0,
+          type: 'in',
+          entry: 'in',
+        },
+        {
+          deal_id: 'DEAL_OUT_BY_1',
+          position_id: 'POS_PART_OUT_BY',
+          symbol: 'EURUSD',
+          side: 'sell',
+          volume: 1.0,
+          price: 1.1040,
+          datetime: '2024-01-09T10:00:00Z',
+          commission: 0,
+          swap: 0,
+          profit: 400,
+          type: 'out_by',
+          entry: 'out_by',
+          comment: 'close by #1234',
+        },
+        // Duplicate of DEAL_OUT_BY_1 in stream
+        {
+          deal_id: 'DEAL_OUT_BY_1',
+          position_id: 'POS_PART_OUT_BY',
+          symbol: 'EURUSD',
+          side: 'sell',
+          volume: 1.0,
+          price: 1.1040,
+          datetime: '2024-01-09T10:00:00Z',
+          commission: 0,
+          swap: 0,
+          profit: 400,
+          type: 'out_by',
+          entry: 'out_by',
+          comment: 'close by #1234',
+        },
+      ];
+
+      const result = aggregateMT5DealsDetailed(deals);
+      expect(result.closedPositions).toHaveLength(1);
+      const pos = result.closedPositions[0];
+      expect(pos.total_volume).toBe(2.0);
+      expect(pos.closed_volume).toBe(1.0);
+      expect(pos.remaining_open_volume).toBe(1.0);
+      expect(pos.is_partial_close).toBe(true);
+      expect(pos.total_profit).toBe(400); // Duplicate was deduplicated
+    });
   });
 
   describe('positionToNormalizedTrade', () => {

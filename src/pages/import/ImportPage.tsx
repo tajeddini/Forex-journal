@@ -31,6 +31,7 @@ interface ImportState {
   normalizedTrades: NormalizedTrade[];
   invalidRows: { row: number; field: string; message: string }[];
   duplicates: Map<number, any>;
+  duplicateCheckError: string | null;
   importResult: {
     total: number;
     valid: number;
@@ -62,6 +63,7 @@ export default function ImportPage() {
     normalizedTrades: [],
     invalidRows: [],
     duplicates: new Map(),
+    duplicateCheckError: null,
     importResult: null,
     source: 'mt4',
     delimiter: ',',
@@ -171,28 +173,23 @@ export default function ImportPage() {
 
     try {
       const existingTrades = await getTrades(user.id, state.account.id);
-      const tickets = state.normalizedTrades
-        .map(t => t.ticket)
-        .filter((t): t is string => t !== null);
-      
-      const duplicateTickets = await checkDuplicateTrades(user.id, state.account.id, tickets);
-      
-      const duplicates = new Map<number, any>();
-      state.normalizedTrades.forEach((trade, index) => {
-        if (trade.ticket && duplicateTickets.has(trade.ticket)) {
-          duplicates.set(index, { ticket: trade.ticket });
-        }
-      });
-
-      setState(prev => ({ ...prev, duplicates }));
-    } catch {
-      // Continue without duplicate check
+      const duplicatesMap = findDuplicates(state.normalizedTrades, existingTrades);
+      setState(prev => ({ ...prev, duplicates: duplicatesMap, duplicateCheckError: null }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'خطا در بررسی معاملات تکراری';
+      toast.error(`بررسی معاملات تکراری متوقف شد: ${errorMsg}`);
+      setState(prev => ({ ...prev, duplicateCheckError: errorMsg }));
     }
-  }, [state.account, state.normalizedTrades, user]);
+  }, [state.account, state.normalizedTrades, user, toast]);
 
   // Import trades
   const handleImport = useCallback(async () => {
     if (!state.account || !user || !state.file) return;
+
+    if (state.duplicateCheckError) {
+      toast.error('بررسی معاملات تکراری با شکست مواجه شده است. امکان ورود اطلاعات بدون اعتبارسنجی تکراری وجود ندارد.');
+      return;
+    }
 
     setState(prev => ({ ...prev, step: 'importing' }));
     let batchId: string | null = null;
@@ -283,11 +280,20 @@ export default function ImportPage() {
       toast.success('معاملات با موفقیت وارد شدند');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'خطا در وارد کردن معاملات';
+      let rollbackErrorMsg: string | null = null;
       if (batchId) {
-        // Atomic rollback: delete all partial trades belonging to this batch and mark as failed
-        await rollbackAndFailImportBatch(batchId, user.id, errorMsg).catch(() => {});
+        try {
+          // Atomic rollback: delete all partial trades belonging to this batch and mark as failed
+          await rollbackAndFailImportBatch(batchId, user.id, errorMsg);
+        } catch (rollbackErr) {
+          rollbackErrorMsg = rollbackErr instanceof Error ? rollbackErr.message : 'خطای نامشخص در بازگردانی';
+        }
       }
-      toast.error(errorMsg);
+      if (rollbackErrorMsg) {
+        toast.error(`خطای بحرانی: ورود داده‌ها با شکست مواجه شد و فرآیند لغو نیز ناموفق بود: ${rollbackErrorMsg}`);
+      } else {
+        toast.error(errorMsg);
+      }
       setState(prev => ({ ...prev, step: 'preview' }));
     }
   }, [state, user, toast]);
@@ -306,6 +312,7 @@ export default function ImportPage() {
       normalizedTrades: [],
       invalidRows: [],
       duplicates: new Map(),
+      duplicateCheckError: null,
       importResult: null,
       source: 'mt4',
       delimiter: ',',

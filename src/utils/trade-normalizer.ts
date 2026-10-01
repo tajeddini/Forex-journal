@@ -258,7 +258,36 @@ export function parseMT5DealRow(
   const dealId = findVal(['deal', 'ticket']) || undefined;
   const orderId = findVal(['order']) || undefined;
   const positionId = findVal(['position', 'position id']) || orderId || dealId;
-  const entry = findVal(['entry', 'direction']) || undefined;
+  const rawEntry = findVal(['entry', 'direction']);
+  let validatedEntry: 'in' | 'out' | 'inout' | 'out_by' | undefined = undefined;
+
+  if (rawEntry) {
+    const lower = rawEntry.toLowerCase().trim();
+    if (lower === 'in' || lower === 'entry' || lower === 'deal_entry_in') {
+      validatedEntry = 'in';
+    } else if (lower === 'out' || lower === 'exit' || lower === 'deal_entry_out') {
+      validatedEntry = 'out';
+    } else if (lower === 'inout' || lower === 'in/out' || lower === 'deal_entry_inout') {
+      validatedEntry = 'inout';
+    } else if (
+      lower === 'out_by' ||
+      lower === 'out by' ||
+      lower === 'outby' ||
+      lower === 'deal_entry_out_by' ||
+      lower === 'close by'
+    ) {
+      validatedEntry = 'out_by';
+    } else {
+      errors.push({
+        row: rowNumber,
+        field: 'entry',
+        message: `نوع ورود/خروج ناشناخته است: ${rawEntry}`,
+        value: rawEntry,
+      });
+      return { deal: null, errors };
+    }
+  }
+
   const commission = normalizeNumber(findVal(['commission'])) || 0;
   const swap = normalizeNumber(findVal(['swap'])) || 0;
   const profit = normalizeNumber(findVal(['profit'])) || 0;
@@ -278,8 +307,8 @@ export function parseMT5DealRow(
     commission,
     swap,
     profit,
-    type: entry || 'deal',
-    entry,
+    type: validatedEntry || (profit !== 0 ? 'out' : 'in'),
+    entry: validatedEntry,
     comment: comment?.trim() || undefined,
     magic_number: magicRaw !== null ? magicRaw : undefined,
   };

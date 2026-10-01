@@ -8,7 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getReviews, createReview, updateReview, deleteReview, getReviewPeriod, computeReviewStats } from '../../services/reviews';
 import { getAccounts } from '../../services/accounts';
 import { getProfile } from '../../services/profiles';
-import { DEFAULT_TIMEZONE } from '../../utils/timezone';
+import { DEFAULT_TIMEZONE, getZonedDateStr } from '../../utils/timezone';
 import type { TradingReview, ReviewType, TradingAccount } from '../../types/database';
 import { REVIEW_TYPES } from '../../types/database';
 import { Card, CardTitle, CardHeader } from '../../components/ui/Card';
@@ -83,7 +83,7 @@ export default function ReviewsPage() {
     setEditingReview(null);
     setFormData({
       review_type: 'daily',
-      review_date: new Date().toISOString().split('T')[0],
+      review_date: getZonedDateStr(new Date(), userTimezone),
       account_id: '',
       summary: '',
       what_went_well: '',
@@ -124,30 +124,17 @@ export default function ReviewsPage() {
     try {
       const date = new Date(formData.review_date);
       const period = getReviewPeriod(formData.review_type, date, userTimezone);
-      const periodStart = period.start.toISOString().split('T')[0];
-      const periodEnd = period.end.toISOString().split('T')[0];
+      const periodStart = getZonedDateStr(period.start, userTimezone);
+      const periodEnd = getZonedDateStr(period.end, userTimezone);
 
-      // Calculate real statistics for this period and account
-      let stats = {
-        total_trades: 0,
-        net_pnl: 0,
-        win_rate: null as number | null,
-        profit_factor: null as number | null,
-        expectancy: null as number | null,
-        avg_duration: null as number | null,
-      };
-
-      try {
-        stats = await computeReviewStats(
-          user.id,
-          period.start,
-          period.end,
-          formData.account_id || null,
-          null
-        );
-      } catch {
-        // Fall back gracefully if trade calculation is unavailable
-      }
+      // Calculate real statistics strictly without silent zero fallback
+      const stats = await computeReviewStats(
+        user.id,
+        period.start,
+        period.end,
+        formData.account_id || null,
+        null
+      );
       
       const reviewData = {
         user_id: user.id,

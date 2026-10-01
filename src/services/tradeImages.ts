@@ -83,10 +83,14 @@ export async function uploadTradeImage(
     .single();
 
   if (error) {
+    let rollbackErrMessage: string | null = null;
     try {
       await provider.delete(storagePath);
-    } catch {
-      // rollback attempted
+    } catch (rbErr) {
+      rollbackErrMessage = rbErr instanceof Error ? rbErr.message : 'Unknown storage delete error';
+    }
+    if (rollbackErrMessage) {
+      throw new Error(`خطا در ثبت تصویر (${error.message}) و پاکسازی فایل از استوریج نیز ناموفق بود (${rollbackErrMessage})`);
     }
     throw new Error(`خطا در ثبت اطلاعات تصویر در پایگاه داده: ${error.message}`);
   }
@@ -241,10 +245,14 @@ export async function replaceTradeImage(
 
   if (updateError) {
     // Rollback newly uploaded image to prevent orphaned storage objects
+    let rollbackErrMessage: string | null = null;
     try {
       await provider.delete(newStoragePath);
-    } catch {
-      // rollback attempted
+    } catch (rbErr) {
+      rollbackErrMessage = rbErr instanceof Error ? rbErr.message : 'Unknown storage delete error';
+    }
+    if (rollbackErrMessage) {
+      throw new Error(`خطا در به‌روزرسانی اطلاعات تصویر (${updateError.message}) و پاکسازی فایل جدید نیز ناموفق بود (${rollbackErrMessage})`);
     }
     throw new Error(`خطا در به‌روزرسانی اطلاعات تصویر: ${updateError.message}`);
   }

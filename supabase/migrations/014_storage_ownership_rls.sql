@@ -21,22 +21,29 @@ DROP POLICY IF EXISTS "Users can update screenshots of own trades" ON storage.ob
 
 -- Security Definer Helper: Extracts trade_id from the canonical storage path:
 -- 'trades/<trade_id>/<filename>' and confirms that the trade belongs to auth.uid().
-CREATE OR REPLACE FUNCTION public.check_trade_screenshot_ownership(storage_name TEXT, user_uuid UUID)
-RETURNS BOOLEAN AS $$
+-- Hardened: SET search_path = '' and no caller-provided user parameter to prevent spoofing.
+CREATE OR REPLACE FUNCTION public.check_trade_screenshot_ownership(storage_name TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
 DECLARE
+  v_user_id UUID;
   v_trade_id_str TEXT;
 BEGIN
-  IF user_uuid IS NULL THEN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
     RETURN FALSE;
   END IF;
 
   -- Verify path root is 'trades'
-  IF split_part(storage_name, '/', 1) <> 'trades' THEN
+  IF pg_catalog.split_part(storage_name, '/', 1) <> 'trades' THEN
     RETURN FALSE;
   END IF;
 
   -- Extract trade_id
-  v_trade_id_str := split_part(storage_name, '/', 2);
+  v_trade_id_str := pg_catalog.split_part(storage_name, '/', 2);
   IF v_trade_id_str IS NULL OR v_trade_id_str = '' THEN
     RETURN FALSE;
   END IF;
@@ -45,10 +52,10 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.trades
     WHERE trades.id::text = v_trade_id_str
-      AND trades.user_id = user_uuid
+      AND trades.user_id = v_user_id
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- 1. INSERT RLS: Authenticated user can ONLY upload into their own trade paths
 CREATE POLICY "Users can upload screenshots for own trades"
@@ -56,7 +63,7 @@ CREATE POLICY "Users can upload screenshots for own trades"
   TO authenticated
   WITH CHECK (
     bucket_id = 'trade-screenshots'
-    AND public.check_trade_screenshot_ownership(name, auth.uid())
+    AND public.check_trade_screenshot_ownership(name)
   );
 
 -- 2. SELECT RLS: Authenticated user can ONLY view screenshots for their own trades
@@ -65,7 +72,7 @@ CREATE POLICY "Users can view screenshots of own trades"
   TO authenticated
   USING (
     bucket_id = 'trade-screenshots'
-    AND public.check_trade_screenshot_ownership(name, auth.uid())
+    AND public.check_trade_screenshot_ownership(name)
   );
 
 -- 3. UPDATE RLS: Authenticated user can ONLY update screenshots for their own trades
@@ -74,11 +81,11 @@ CREATE POLICY "Users can update screenshots of own trades"
   TO authenticated
   USING (
     bucket_id = 'trade-screenshots'
-    AND public.check_trade_screenshot_ownership(name, auth.uid())
+    AND public.check_trade_screenshot_ownership(name)
   )
   WITH CHECK (
     bucket_id = 'trade-screenshots'
-    AND public.check_trade_screenshot_ownership(name, auth.uid())
+    AND public.check_trade_screenshot_ownership(name)
   );
 
 -- 4. DELETE RLS: Authenticated user can ONLY delete screenshots for their own trades
@@ -87,5 +94,5 @@ CREATE POLICY "Users can delete screenshots of own trades"
   TO authenticated
   USING (
     bucket_id = 'trade-screenshots'
-    AND public.check_trade_screenshot_ownership(name, auth.uid())
+    AND public.check_trade_screenshot_ownership(name)
   );

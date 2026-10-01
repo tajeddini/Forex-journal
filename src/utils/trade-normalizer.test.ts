@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapColumns, normalizeSide, normalizeNumber, normalizeDatetime, normalizeTradeRow, detectTradeSource } from './trade-normalizer';
+import { mapColumns, normalizeSide, normalizeNumber, normalizeDatetime, normalizeTradeRow, detectTradeSource, parseMT5DealRow } from './trade-normalizer';
 
 describe('Trade Normalizer', () => {
   describe('mapColumns', () => {
@@ -140,6 +140,43 @@ describe('Trade Normalizer', () => {
 
     it('defaults to MT4', () => {
       expect(detectTradeSource('trades.csv', ['Ticket', 'Symbol'])).toBe('mt4');
+    });
+  });
+
+  describe('parseMT5DealRow entry validation', () => {
+    const baseRow = {
+      Symbol: 'EURUSD',
+      Type: 'buy',
+      Volume: '1.0',
+      Price: '1.1000',
+      Time: '2024-01-01 10:00:00',
+      Deal: '100',
+      Position: '200',
+    };
+
+    it('parses in, out, inout, and out_by correctly', () => {
+      const inRes = normalizeTradeRow ? parseMT5DealRow({ ...baseRow, Entry: 'in' }, 1) : null;
+      expect(inRes?.deal?.entry).toBe('in');
+
+      const outRes = parseMT5DealRow({ ...baseRow, Entry: 'out' }, 1);
+      expect(outRes.deal?.entry).toBe('out');
+
+      const inoutRes = parseMT5DealRow({ ...baseRow, Entry: 'inout' }, 1);
+      expect(inoutRes.deal?.entry).toBe('inout');
+
+      const outByRes = parseMT5DealRow({ ...baseRow, Entry: 'out_by' }, 1);
+      expect(outByRes.deal?.entry).toBe('out_by');
+
+      const closeByRes = parseMT5DealRow({ ...baseRow, Entry: 'close by' }, 1);
+      expect(closeByRes.deal?.entry).toBe('out_by');
+    });
+
+    it('rejects unknown entry values with an explicit validation error', () => {
+      const res = parseMT5DealRow({ ...baseRow, Entry: 'unrecognized_entry_type' }, 1);
+      expect(res.deal).toBeNull();
+      expect(res.errors.length).toBeGreaterThan(0);
+      expect(res.errors[0].field).toBe('entry');
+      expect(res.errors[0].message).toContain('نوع ورود/خروج ناشناخته است');
     });
   });
 });

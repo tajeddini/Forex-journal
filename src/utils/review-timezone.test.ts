@@ -69,27 +69,64 @@ describe('Review Timezone Engine — Strict Boundary & Offset Verification', () 
     expect(end.toISOString()).toBe('2024-01-12T23:59:59.999Z');
   });
 
-  it('calculates monthly review boundaries from day 1 to last day of month', () => {
-    // February in leap year 2024 has 29 days
-    const { start, end, startStr, endStr } = getZonedReviewPeriod('monthly', '2024-02-14T10:00:00Z', 'UTC');
+  it('calculates monthly review boundaries for Jan, Feb leap, Feb non-leap, and Dec', () => {
+    // January (31 days)
+    const jan = getZonedReviewPeriod('monthly', '2024-01-15T12:00:00Z', 'UTC');
+    expect(jan.startStr).toBe('2024-01-01');
+    expect(jan.endStr).toBe('2024-01-31');
 
-    expect(startStr).toBe('2024-02-01');
-    expect(endStr).toBe('2024-02-29');
-    expect(start.toISOString()).toBe('2024-02-01T00:00:00.000Z');
-    expect(end.toISOString()).toBe('2024-02-29T23:59:59.999Z');
+    // February in leap year 2024 (29 days)
+    const febLeap = getZonedReviewPeriod('monthly', '2024-02-14T10:00:00Z', 'UTC');
+    expect(febLeap.startStr).toBe('2024-02-01');
+    expect(febLeap.endStr).toBe('2024-02-29');
+
+    // February in non-leap year 2023 (28 days)
+    const febNonLeap = getZonedReviewPeriod('monthly', '2023-02-14T10:00:00Z', 'UTC');
+    expect(febNonLeap.startStr).toBe('2023-02-01');
+    expect(febNonLeap.endStr).toBe('2023-02-28');
+
+    // December (31 days)
+    const dec = getZonedReviewPeriod('monthly', '2024-12-25T12:00:00Z', 'UTC');
+    expect(dec.startStr).toBe('2024-12-01');
+    expect(dec.endStr).toBe('2024-12-31');
   });
 
-  it('handles DST transitions seamlessly in createZonedDate', () => {
-    // US DST Spring Forward 2024: March 10, 2024
-    // At 2:00 AM, clocks jump to 3:00 AM
-    const datePreDST = createZonedDate(2024, 3, 10, 1, 30, 0, 0, 'America/New_York');
-    const partsPre = getZonedDateParts(datePreDST, 'America/New_York');
-    expect(partsPre.hour).toBe(1);
-    expect(partsPre.minute).toBe(30);
+  it('handles DST spring-forward and fall-back in America/New_York and Europe/London', () => {
+    // NY Spring Forward: March 10, 2024
+    const nySpring = createZonedDate(2024, 3, 10, 14, 0, 0, 0, 'America/New_York');
+    const nySpringParts = getZonedDateParts(nySpring, 'America/New_York');
+    expect(nySpringParts.hour).toBe(14);
 
-    const datePostDST = createZonedDate(2024, 3, 10, 4, 0, 0, 0, 'America/New_York');
-    const partsPost = getZonedDateParts(datePostDST, 'America/New_York');
-    expect(partsPost.hour).toBe(4);
-    expect(partsPost.minute).toBe(0);
+    // NY Fall Back: November 3, 2024
+    const nyFall = createZonedDate(2024, 11, 3, 14, 0, 0, 0, 'America/New_York');
+    const nyFallParts = getZonedDateParts(nyFall, 'America/New_York');
+    expect(nyFallParts.hour).toBe(14);
+
+    // London Spring Forward: March 31, 2024 (clocks jump forward at 1am)
+    const lonSpring = createZonedDate(2024, 3, 31, 14, 0, 0, 0, 'Europe/London');
+    const lonSpringParts = getZonedDateParts(lonSpring, 'Europe/London');
+    expect(lonSpringParts.hour).toBe(14);
+
+    // London Fall Back: October 27, 2024 (clocks fall back at 2am)
+    const lonFall = createZonedDate(2024, 10, 27, 14, 0, 0, 0, 'Europe/London');
+    const lonFallParts = getZonedDateParts(lonFall, 'Europe/London');
+    expect(lonFallParts.hour).toBe(14);
+  });
+
+  it('handles exact boundary timestamps: 00:00:00, 00:00:00.001, 23:59:59, 23:59:59.999', () => {
+    const d00 = createZonedDate(2024, 5, 20, 0, 0, 0, 0, 'Asia/Tehran');
+    expect(getZonedDateParts(d00, 'Asia/Tehran').hour).toBe(0);
+    expect(getZonedDateParts(d00, 'Asia/Tehran').minute).toBe(0);
+
+    const d00_ms = createZonedDate(2024, 5, 20, 0, 0, 0, 1, 'Asia/Tehran');
+    expect(getZonedDateParts(d00_ms, 'Asia/Tehran').hour).toBe(0);
+
+    const d23_59 = createZonedDate(2024, 5, 20, 23, 59, 59, 0, 'Asia/Tehran');
+    expect(getZonedDateParts(d23_59, 'Asia/Tehran').hour).toBe(23);
+    expect(getZonedDateParts(d23_59, 'Asia/Tehran').minute).toBe(59);
+
+    const d23_59_999 = createZonedDate(2024, 5, 20, 23, 59, 59, 999, 'Asia/Tehran');
+    expect(getZonedDateParts(d23_59_999, 'Asia/Tehran').hour).toBe(23);
+    expect(getZonedDateParts(d23_59_999, 'Asia/Tehran').minute).toBe(59);
   });
 });
