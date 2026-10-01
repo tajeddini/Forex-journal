@@ -8,6 +8,7 @@ import { supabase, isSupabaseConfigured } from './supabase';
 import { MockStorage } from './mockStorage';
 import type { TradingReview, TradingReviewInsert, TradingReviewUpdate, ReviewType, Trade } from '../types/database';
 import { classifyTrades, calculateCoreMetrics } from './analytics/metrics';
+import { getZonedReviewPeriod, DEFAULT_TIMEZONE } from '../utils/timezone';
 
 /**
  * Get all reviews for a user
@@ -63,8 +64,8 @@ export async function getReview(reviewId: string, userId: string): Promise<Tradi
  */
 export async function computeReviewStats(
   userId: string,
-  periodStart: string,
-  periodEnd: string,
+  periodStart: string | Date,
+  periodEnd: string | Date,
   accountId?: string | null,
   phaseId?: string | null
 ): Promise<{
@@ -77,19 +78,30 @@ export async function computeReviewStats(
 }> {
   let trades: Trade[] = [];
 
+  const startIso = typeof periodStart === 'string'
+    ? (periodStart.includes('T') ? periodStart : `${periodStart}T00:00:00.000Z`)
+    : periodStart.toISOString();
+
+  const endIso = typeof periodEnd === 'string'
+    ? (periodEnd.includes('T') ? periodEnd : `${periodEnd}T23:59:59.999Z`)
+    : periodEnd.toISOString();
+
+  const startTimeMs = new Date(startIso).getTime();
+  const endTimeMs = new Date(endIso).getTime();
+
   if (!isSupabaseConfigured || userId === 'guest-demo-user') {
     const allTrades = await MockStorage.getTrades({ accountId: accountId || undefined });
     trades = allTrades.filter(t => {
-      const exitTime = t.exit_datetime.split('T')[0];
-      return exitTime >= periodStart && exitTime <= periodEnd;
+      const exitTime = new Date(t.exit_datetime).getTime();
+      return exitTime >= startTimeMs && exitTime <= endTimeMs;
     });
   } else {
     let query = supabase
       .from('trades')
       .select('*')
       .eq('user_id', userId)
-      .gte('exit_datetime', `${periodStart}T00:00:00.000Z`)
-      .lte('exit_datetime', `${periodEnd}T23:59:59.999Z`);
+      .gte('exit_datetime', startIso)
+      .lte('exit_datetime', endIso);
 
     if (accountId) {
       query = query.eq('account_id', accountId);
@@ -202,34 +214,13 @@ export async function deleteReview(reviewId: string, userId: string): Promise<vo
 }
 
 /**
- * Get period dates for a review type
+ * Get period dates for a review type calculated in target timezone
  */
-export function getReviewPeriod(type: ReviewType, date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  let end = new Date(date);
-
-  switch (type) {
-    case 'daily':
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      break;
-    case 'weekly':
-      // Start of week (Saturday for Persian calendar)
-      const day = start.getDay();
-      const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-      start.setDate(diff);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
-      break;
-    case 'monthly':
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-      end.setHours(23, 59, 59, 999);
-      break;
-  }
-
+export function getReviewPeriod(
+  type: ReviewType,
+  date: Date | string,
+  timeZone: string = DEFAULT_TIMEZONE
+): { start: Date; end: Date } {
+  const { start, end } = getZonedReviewPeriod(type, date, timeZone);
   return { start, end };
 }

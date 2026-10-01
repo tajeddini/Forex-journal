@@ -208,6 +208,12 @@ export const MockStorage = {
     trades = trades.filter((t) => t.id !== id);
     saveToStorage('trades', trades);
   },
+  deleteTradesByBatchId: async (batchId: string): Promise<number> => {
+    const initialLen = trades.length;
+    trades = trades.filter((t) => t.import_batch_id !== batchId);
+    saveToStorage('trades', trades);
+    return initialLen - trades.length;
+  },
 
   // Phases
   getPhases: async (accountId?: string): Promise<AccountPhase[]> => {

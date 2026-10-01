@@ -113,3 +113,26 @@ export async function failImportBatch(
     completed_at: new Date().toISOString(),
   });
 }
+
+/**
+ * Rollback an import batch completely: delete any inserted trades and mark batch as failed
+ */
+export async function rollbackAndFailImportBatch(
+  batchId: string,
+  userId: string,
+  error_message: string
+): Promise<ImportBatch> {
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    await MockStorage.deleteTradesByBatchId(batchId);
+    return failImportBatch(batchId, userId, error_message, 0);
+  }
+
+  // Delete all trades linked to this batch
+  await supabase
+    .from('trades')
+    .delete()
+    .eq('import_batch_id', batchId)
+    .eq('user_id', userId);
+
+  return failImportBatch(batchId, userId, error_message, 0);
+}

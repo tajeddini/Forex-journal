@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getAccounts } from '../../services/accounts';
 import { getPhases } from '../../services/accountPhases';
-import { createImportBatch, completeImportBatch, failImportBatch } from '../../services/importBatches';
+import { createImportBatch, completeImportBatch, failImportBatch, rollbackAndFailImportBatch } from '../../services/importBatches';
 import { createTradesBatch, checkDuplicateTrades } from '../../services/trades';
 import type { TradingAccount, AccountPhase, TradeSource, TradeInsert } from '../../types/database';
 import { parseCSV, validateCSVFile, readFileAsText, detectDelimiter } from '../../utils/csv-parser';
@@ -284,7 +284,8 @@ export default function ImportPage() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'خطا در وارد کردن معاملات';
       if (batchId) {
-        await failImportBatch(batchId, user.id, errorMsg, importedCount).catch(() => {});
+        // Atomic rollback: delete all partial trades belonging to this batch and mark as failed
+        await rollbackAndFailImportBatch(batchId, user.id, errorMsg).catch(() => {});
       }
       toast.error(errorMsg);
       setState(prev => ({ ...prev, step: 'preview' }));

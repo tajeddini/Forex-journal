@@ -7,6 +7,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getReviews, createReview, updateReview, deleteReview, getReviewPeriod, computeReviewStats } from '../../services/reviews';
 import { getAccounts } from '../../services/accounts';
+import { getProfile } from '../../services/profiles';
+import { DEFAULT_TIMEZONE } from '../../utils/timezone';
 import type { TradingReview, ReviewType, TradingAccount } from '../../types/database';
 import { REVIEW_TYPES } from '../../types/database';
 import { Card, CardTitle, CardHeader } from '../../components/ui/Card';
@@ -26,6 +28,7 @@ export default function ReviewsPage() {
   
   const [reviews, setReviews] = useState<TradingReview[]>([]);
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
+  const [userTimezone, setUserTimezone] = useState<string>(DEFAULT_TIMEZONE);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<ReviewType | 'all'>('all');
   
@@ -66,6 +69,12 @@ export default function ReviewsPage() {
 
       getAccounts(user.id)
         .then(setAccounts)
+        .catch(() => {});
+
+      getProfile(user.id)
+        .then(p => {
+          if (p?.timezone) setUserTimezone(p.timezone);
+        })
         .catch(() => {});
     }
   }, [user, filterType]);
@@ -114,7 +123,7 @@ export default function ReviewsPage() {
     setSaving(true);
     try {
       const date = new Date(formData.review_date);
-      const period = getReviewPeriod(formData.review_type, date);
+      const period = getReviewPeriod(formData.review_type, date, userTimezone);
       const periodStart = period.start.toISOString().split('T')[0];
       const periodEnd = period.end.toISOString().split('T')[0];
 
@@ -131,8 +140,8 @@ export default function ReviewsPage() {
       try {
         stats = await computeReviewStats(
           user.id,
-          periodStart,
-          periodEnd,
+          period.start,
+          period.end,
           formData.account_id || null,
           null
         );

@@ -56,6 +56,17 @@ export async function uploadTradeImage(
     return MockStorage.saveTradeImage(localImage);
   }
 
+  // Verify trade exists and belongs to the authenticated user before uploading
+  const { data: trade, error: tradeError } = await supabase
+    .from('trades')
+    .select('user_id')
+    .eq('id', tradeId)
+    .single();
+
+  if (tradeError || !trade || trade.user_id !== userId) {
+    throw new Error('عدم دسترسی: معامله یافت نشد یا متعلق به شما نیست');
+  }
+
   // Upload to storage
   const provider = getSupabaseStorageProvider();
   await provider.upload({

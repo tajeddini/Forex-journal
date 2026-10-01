@@ -146,3 +146,25 @@ export async function checkDuplicateTrades(
 
   return existingTickets;
 }
+
+/**
+ * Delete all trades associated with an import batch (rollback on failure)
+ */
+export async function deleteTradesByBatchId(batchId: string, userId: string): Promise<number> {
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.deleteTradesByBatchId(batchId);
+  }
+
+  const { data, error } = await supabase
+    .from('trades')
+    .delete()
+    .eq('import_batch_id', batchId)
+    .eq('user_id', userId)
+    .select('id');
+
+  if (error) {
+    throw new Error(`خطا در پاکسازی معاملات دسته ورود: ${error.message}`);
+  }
+
+  return data ? data.length : 0;
+}
