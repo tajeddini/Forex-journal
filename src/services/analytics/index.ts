@@ -7,8 +7,8 @@
 
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { MockStorage } from '../mockStorage';
-import type { CoreMetrics, EquityCurve, TimeAggregatedPnl, PerformanceBreakdown,  Trade, TradingAccount } from '../../types/database';
-import type { AnalyticsFilters, AnalyticsResult } from './types';
+import type { Trade, TradingAccount } from '../../types/database';
+import type { CoreMetrics, EquityCurve, TimeAggregatedPnl, PerformanceBreakdown, AnalyticsFilters, AnalyticsResult } from './types';
 import { classifyTrades, calculateCoreMetrics, calculateNetPnl } from './metrics';
 import { calculateEquityCurve, calculateDrawdown } from './equity';
 import { aggregateByTime, calculatePerformanceBreakdown, calculateDurationMetrics } from './aggregation';
