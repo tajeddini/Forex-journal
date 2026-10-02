@@ -9,6 +9,7 @@ import type { TradingAccount, AccountPhase, TradeSource, TradeInsert } from '../
 import { parseCSV, validateCSVFile, readFileAsText, detectDelimiter } from '../../utils/csv-parser';
 import { mapColumns, normalizeTradeRow, detectTradeSource, parseMT5DealRow, type NormalizedTrade } from '../../utils/trade-normalizer';
 import { findDuplicates } from '../../utils/duplicate-detector';
+import { parseMT5PositionReport } from '../../utils/mt5-report-parser';
 import { aggregateMT5DealsDetailed, positionToNormalizedTrade, type MT5Deal } from '../../utils/mt5-aggregation';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -41,6 +42,7 @@ interface ImportState {
   } | null;
   source: TradeSource;
   delimiter: string;
+  format: 'csv' | 'mt5-position-report';
 }
 
 export default function ImportPage() {
@@ -67,6 +69,7 @@ export default function ImportPage() {
     importResult: null,
     source: 'mt4',
     delimiter: ',',
+    format: 'csv',
   });
 
   // Load accounts
@@ -96,13 +99,34 @@ export default function ImportPage() {
 
   // Handle file selection
   const handleFileSelect = useCallback(async (file: File) => {
-    const validation = validateCSVFile(file);
-    if (!validation.valid) {
-      toast.error(validation.error || 'فایل نامعتبر است');
-      return;
-    }
+    const isExcel = /\\.(xlsx|xls)$/i.test(file.name);
 
     try {
+      if (isExcel) {
+        const parsed = await parseMT5PositionReport(file);
+        const mapping = Object.fromEntries(parsed.headers.map((header) => [header, header]));
+
+        setState(prev => ({
+          ...prev,
+          step: 'mapping',
+          file,
+          rawContent: '',
+          headers: parsed.headers,
+          rows: parsed.rows,
+          columnMapping: mapping,
+          source: 'mt5',
+          delimiter: '',
+          format: parsed.format,
+        }));
+        return;
+      }
+
+      const validation = validateCSVFile(file);
+      if (!validation.valid) {
+        toast.error(validation.error || 'فایل نامعتبر است');
+        return;
+      }
+
       const content = await readFileAsText(file);
       const delimiter = detectDelimiter(content);
       const parsed = parseCSV(content, { delimiter });
@@ -119,9 +143,10 @@ export default function ImportPage() {
         columnMapping: mapping,
         source,
         delimiter,
+        format: 'csv',
       }));
     } catch (err) {
-      toast.error('خطا در خواندن فایل');
+      toast.error(err instanceof Error ? err.message : 'خطا در خواندن فایل');
     }
   }, [toast]);
 
@@ -130,7 +155,22 @@ export default function ImportPage() {
     const invalidRows: { row: number; field: string; message: string }[] = [];
     let finalTrades: NormalizedTrade[] = [];
 
-    if (state.source === 'mt5') {
+    if (state.format === 'mt5-position-report') {
+      // The MT5 Excel "Positions" report already contains complete
+      // entry/exit rows. It must NOT go through the deal aggregation path.
+      for (let i = 0; i < state.rows.length; i++) {
+        const { trade, errors } = normalizeTradeRow(
+          state.rows[i],
+          state.columnMapping,
+          i + 1
+        );
+        if (trade) {
+          finalTrades.push(trade);
+        } else {
+          invalidRows.push(...errors);
+        }
+      }
+    } else if (state.source === 'mt5') {
       const deals: MT5Deal[] = [];
       for (let i = 0; i < state.rows.length; i++) {
         const { deal, errors } = parseMT5DealRow(state.rows[i], i + 1);
@@ -322,6 +362,7 @@ export default function ImportPage() {
       importResult: null,
       source: 'mt4',
       delimiter: ',',
+      format: 'csv',
     });
   }, []);
 
@@ -408,7 +449,7 @@ export default function ImportPage() {
         <Card>
           <CardTitle>نگاشت ستون‌ها</CardTitle>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            ستون‌های فایل CSV به فیلدهای معامله نگاشت شدند. در صورت نیاز اصلاح کنید.
+            ستون‌های فایل به فیلدهای معامله نگاشت شدند. در صورت نیاز اصلاح کنید.
           </p>
           <div className="mt-4 space-y-2">
             {state.headers.map(header => (
@@ -596,16 +637,16 @@ function FileDropzone({ onFileSelect }: { onFileSelect: (file: File) => void }) 
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
       </svg>
       <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-        فایل CSV را اینجا رها کنید یا
+        فایل CSV یا Excel متاتریدر را اینجا رها کنید یا
       </p>
       <label className="mt-2 cursor-pointer">
         <span className="text-blue-600 dark:text-blue-400 font-medium hover:text-blue-500">
           انتخاب فایل
         </span>
-        <input type="file" accept=".csv" onChange={handleChange} className="hidden" />
+        <input type="file" accept=".csv,.xlsx,.xls" onChange={handleChange} className="hidden" />
       </label>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-500">
-        حداکثر ۱۰ مگابایت
+        CSV، XLSX و XLS — حداکثر ۱۰ مگابایت
       </p>
     </div>
   );
