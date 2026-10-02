@@ -16,8 +16,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <LoadingPage />;
   }
 
-  // Allow access if authenticated OR in guest mode
-  if (!user && !isGuest) {
+  // Production protected routes require a real Supabase-authenticated user.
+  // Guest mode remains available only through its dedicated public flow and
+  // must not bypass database-backed authentication guards.
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
