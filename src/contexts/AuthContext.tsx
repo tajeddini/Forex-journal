@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured);
 
   // Load profile for the current user
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string, displayName?: string) => {
     try {
       const existing = await getProfile(userId);
       if (existing) {
@@ -53,14 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         const newProfile = await createProfile({
           id: userId,
-          display_name: user?.email?.split('@')[0] || 'کاربر',
+          display_name: displayName || 'کاربر',
         });
         setProfile(newProfile);
       }
     } catch (err) {
       console.error('Error loading profile:', err);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        loadProfile(session.user.id);
+        loadProfile(session.user.id, session.user.user_metadata?.display_name || session.user.email?.split('@')[0]);
       }
       setLoading(false);
     }).catch(() => {
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          loadProfile(session.user.id);
+          loadProfile(session.user.id, session.user.user_metadata?.display_name || session.user.email?.split('@')[0]);
         } else {
           setProfile(null);
         }
