@@ -99,7 +99,7 @@ export default function ImportPage() {
 
   // Handle file selection
   const handleFileSelect = useCallback(async (file: File) => {
-    const isExcel = /\\.(xlsx|xls)$/i.test(file.name);
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
 
     try {
       if (isExcel) {
