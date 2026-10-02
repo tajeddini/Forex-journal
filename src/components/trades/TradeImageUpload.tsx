@@ -92,7 +92,7 @@ export function TradeImageUpload({ tradeId, userId, onUploadComplete }: TradeIma
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,image/webp"
+        accept="image/*"
         onChange={handleFileSelect}
         className="hidden"
         disabled={isUploading}
@@ -122,7 +122,7 @@ export function TradeImageUpload({ tradeId, userId, onUploadComplete }: TradeIma
             تصویر را اینجا رها کنید یا کلیک کنید
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-500">
-            JPEG, PNG, WebP - حداکثر 10MB
+            تصاویر (JPG, PNG, WebP و سایر فرمت‌های تصویری) - حداکثر 10MB
           </p>
         </div>
       )}
