@@ -5,7 +5,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { fetchDashboardTrades, fetchAccounts } from '../../services/analytics';
+import { getDashboardAnalytics, fetchAccounts } from '../../services/analytics';
 import { classifyTrades, calculateCoreMetrics } from '../../services/analytics/metrics';
 import { calculateEquityCurve, calculateDrawdown } from '../../services/analytics/equity';
 import { aggregateByTime, calculatePerformanceBreakdown } from '../../services/analytics/aggregation';
