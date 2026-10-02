@@ -59,6 +59,42 @@ export async function fetchAnalyticsTrades(
   return data || [];
 }
 
+
+/**
+ * Fetch only the trade columns required by the dashboard.
+ * Keeping this payload narrow avoids transferring unused MT4/MT5 fields.
+ */
+export async function fetchDashboardTrades(
+  userId: string,
+  filters: AnalyticsFilters
+): Promise<Trade[]> {
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.getTrades({
+      accountId: filters.accountId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    });
+  }
+
+  let query = supabase
+    .from('trades')
+    .select('id, account_id, phase_id, symbol, side, entry_datetime, exit_datetime, profit, commission, swap, duration_seconds')
+    .eq('user_id', userId)
+    .order('exit_datetime', { ascending: true });
+
+  if (filters.accountId) query = query.eq('account_id', filters.accountId);
+  if (filters.phaseId) query = query.eq('phase_id', filters.phaseId);
+  if (filters.dateFrom) query = query.gte('exit_datetime', filters.dateFrom);
+  if (filters.dateTo) query = query.lte('exit_datetime', filters.dateTo);
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`خطا در دریافت معاملات داشبورد: ${error.message}`);
+  }
+
+  return data || [];
+}
+
 /**
  * Fetch accounts for filter options
  */
