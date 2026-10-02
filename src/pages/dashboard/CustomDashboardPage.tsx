@@ -5,9 +5,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getTradeCount } from '../../services/tradeJournals';
-import { getAccountCount } from '../../services/accounts';
-import { fetchAnalyticsTrades, fetchAccounts } from '../../services/analytics';
+import { fetchDashboardTrades, fetchAccounts } from '../../services/analytics';
 import { classifyTrades, calculateCoreMetrics } from '../../services/analytics/metrics';
 import { calculateEquityCurve, calculateDrawdown } from '../../services/analytics/equity';
 import { aggregateByTime, calculatePerformanceBreakdown } from '../../services/analytics/aggregation';
@@ -67,24 +65,20 @@ export default function CustomDashboardPage() {
 
     const loadData = async () => {
       try {
-        // Load layout
-        const savedLayout = await getDefaultDashboardLayout(user.id);
+        // Start independent dashboard requests together to avoid a network waterfall.
+        const [savedLayout, accountsData, rawTrades] = await Promise.all([
+          getDefaultDashboardLayout(user.id),
+          fetchAccounts(user.id),
+          fetchDashboardTrades(user.id, { accountId: selectedAccountId }),
+        ]);
+
         if (savedLayout) {
           setLayout(savedLayout);
           setWidgets(savedLayout.layout_config || DEFAULT_DASHBOARD_WIDGETS);
         }
 
-        // Load accounts and counts
-        const [accountsData, accCount, tradeCount] = await Promise.all([
-          fetchAccounts(user.id),
-          getAccountCount(user.id),
-          getTradeCount(user.id),
-        ]);
         setAccounts(accountsData);
-        setAccountCount(accCount);
-
-        // Load trades for analytics
-        const rawTrades = await fetchAnalyticsTrades(user.id, { accountId: selectedAccountId });
+        setAccountCount(accountsData.length);
         setTrades(classifyTrades(rawTrades));
       } catch (err) {
         console.error('Error loading dashboard:', err);
