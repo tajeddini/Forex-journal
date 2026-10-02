@@ -18,6 +18,7 @@ export interface MT5Deal {
   position_id?: string;
   order_id?: string;
   deal_id?: string;
+  position_by_id?: string; // Authoritative opposite position identifier for Close By (out_by)
   symbol: string;
   side: 'buy' | 'sell';
   volume: number;
@@ -86,8 +87,8 @@ export function classifyDealDirection(deal: MT5Deal): 'in' | 'out' | 'inout' | '
     return 'out_by';
   }
 
-  // Fallback inference from comment / profit if entry column was omitted
-  if (deal.comment && /close by/i.test(deal.comment)) {
+  // If deal has structured opposite position ID, it is an out_by deal
+  if (deal.position_by_id) {
     return 'out_by';
   }
 
@@ -248,39 +249,69 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
           activePos.openVolume += deal.volume;
         }
       } else if (semantic === 'out' || semantic === 'out_by') {
-        const closeByMatch = deal.comment?.match(/close\s+by\s+#?(\w+)/i);
-        const closeByOtherId = closeByMatch ? closeByMatch[1] : undefined;
+        const closeByOtherId = deal.position_by_id?.trim() || undefined;
 
-        if (semantic === 'out_by' && closeByOtherId) {
+        if (semantic === 'out_by') {
+          if (!closeByOtherId) {
+            throw new Error(
+              `معامله خروج Close By در پوزیشن ${deal.position_id || positionKey} فاقد شناسه ساختاریافته پوزیشن مقابل (position_by_id) است.`
+            );
+          }
+
           if (activePos) {
             activePos.close_by_position_id = closeByOtherId;
           }
-          // Cross-position linking: If counterpart position exists in export and has no exit deals, synthesize its exit
-          if (positionGroups.has(closeByOtherId)) {
-            const counterpartDeals = positionGroups.get(closeByOtherId)!;
-            const hasExit = counterpartDeals.some(d => {
-              const s = classifyDealDirection(d);
-              return s === 'out' || s === 'out_by';
-            });
-            if (!hasExit && counterpartDeals.length > 0) {
-              const targetEntryDeal = counterpartDeals[0];
-              const syntheticCounterpart: MT5Deal = {
-                position_id: closeByOtherId,
-                ticket: targetEntryDeal.ticket || closeByOtherId,
-                symbol: deal.symbol,
-                side: targetEntryDeal.side === 'buy' ? 'sell' : 'buy',
-                volume: Math.min(targetEntryDeal.volume, deal.volume),
-                price: deal.price,
-                datetime: deal.datetime,
-                commission: 0,
-                swap: 0,
-                profit: 0,
-                entry: 'out_by',
-                type: 'out_by',
-                comment: `close by #${positionKey}`,
-              };
-              counterpartDeals.push(syntheticCounterpart);
+
+          // Validate relationship with counterpart position
+          if (!positionGroups.has(closeByOtherId)) {
+            throw new Error(
+              `پوزیشن مقابل (${closeByOtherId}) برای معامله Close By پوزیشن ${positionKey} در داده‌های ورودی یافت نشد.`
+            );
+          }
+
+          const counterpartDeals = positionGroups.get(closeByOtherId)!;
+          const counterpartEntryDeal = counterpartDeals.find(d => {
+            const s = classifyDealDirection(d);
+            return s === 'in' || s === 'inout';
+          }) || counterpartDeals[0];
+
+          if (counterpartEntryDeal) {
+            if (counterpartEntryDeal.symbol !== deal.symbol) {
+              throw new Error(
+                `عدم تطابق نماد در معامله Close By: پوزیشن ${positionKey} با نماد ${deal.symbol} و پوزیشن مقابل ${closeByOtherId} با نماد ${counterpartEntryDeal.symbol}`
+              );
             }
+            if (activePos && counterpartEntryDeal.side === activePos.side) {
+              throw new Error(
+                `جهت معاملات پوزیشن‌های Close By باید مخالف هم باشند: هر دو پوزیشن دارای جهت ${activePos.side} هستند.`
+              );
+            }
+          }
+
+          // Cross-position linking: If counterpart position exists in export and has no exit deals, synthesize its exit
+          const counterpartHasExit = counterpartDeals.some(d => {
+            const s = classifyDealDirection(d);
+            return s === 'out' || s === 'out_by';
+          });
+
+          if (!counterpartHasExit && counterpartDeals.length > 0) {
+            const targetEntryDeal = counterpartDeals[0];
+            const syntheticCounterpart: MT5Deal = {
+              position_id: closeByOtherId,
+              ticket: targetEntryDeal.ticket || closeByOtherId,
+              position_by_id: positionKey,
+              symbol: deal.symbol,
+              side: targetEntryDeal.side === 'buy' ? 'sell' : 'buy',
+              volume: Math.min(targetEntryDeal.volume, deal.volume),
+              price: deal.price,
+              datetime: deal.datetime,
+              commission: 0,
+              swap: 0,
+              profit: 0,
+              entry: 'out_by',
+              type: 'out_by',
+            };
+            counterpartDeals.push(syntheticCounterpart);
           }
         }
 
@@ -532,6 +563,7 @@ export function positionToNormalizedTrade(position: AggregatedPosition): Normali
   return {
     ticket: position.ticket,
     position_id: position.position_id,
+    position_by_id: position.close_by_position_id || null,
     symbol: position.symbol,
     side: position.side,
     volume: position.closed_volume || position.total_volume,

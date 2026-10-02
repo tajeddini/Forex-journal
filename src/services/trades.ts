@@ -115,6 +115,63 @@ export async function createTradesBatch(trades: TradeInsert[]): Promise<Trade[]>
   return data || [];
 }
 
+/**
+ * Execute full-import atomic transaction:
+ * Inserts all trades AND completes the batch atomically in one PostgreSQL transaction.
+ * If any error occurs (duplicate, constraint violation, cross-user mismatch), the entire
+ * transaction rolls back in the database, leaving zero partial trades.
+ */
+export async function executeAtomicTradeImport({
+  batchId,
+  userId,
+  accountId,
+  phaseId,
+  trades,
+  finalStatus = 'completed',
+}: {
+  batchId: string;
+  userId: string;
+  accountId: string;
+  phaseId?: string | null;
+  trades: TradeInsert[];
+  finalStatus?: 'completed' | 'completed_with_warnings';
+}): Promise<{ insertedCount: number; batchId: string }> {
+  const MAX_ATOMIC_TRADES = 5000;
+  if (trades.length > MAX_ATOMIC_TRADES) {
+    throw new Error(
+      `تعداد معاملات برای ورود یکپارچه (${trades.length}) از حداکثر مجاز (${MAX_ATOMIC_TRADES}) بیشتر است. لطفاً فایل را به بخش‌های کوچک‌تر تقسیم نمایید.`
+    );
+  }
+
+  if (!isSupabaseConfigured || userId === 'guest-demo-user') {
+    return MockStorage.executeAtomicTradeImport({
+      batchId,
+      userId,
+      accountId,
+      phaseId,
+      trades,
+      finalStatus,
+    });
+  }
+
+  const { data, error } = await supabase.rpc('import_trades_transactional', {
+    p_batch_id: batchId,
+    p_user_id: userId,
+    p_account_id: accountId,
+    p_trades: trades,
+    p_final_status: finalStatus,
+  });
+
+  if (error) {
+    throw new Error(`خطا در ثبت یکپارچه تراکنش معاملات: ${error.message}`);
+  }
+
+  return {
+    insertedCount: data?.inserted_count ?? trades.length,
+    batchId,
+  };
+}
+
 export async function getTradesByAccount(accountId: string, userId: string): Promise<Trade[]> {
   return getTrades(userId, accountId);
 }

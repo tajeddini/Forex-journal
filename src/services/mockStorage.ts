@@ -339,6 +339,136 @@ export const MockStorage = {
     return updated;
   },
 
+  executeAtomicTradeImport: async ({
+    batchId,
+    userId,
+    accountId,
+    phaseId,
+    trades: newTrades,
+    finalStatus = 'completed',
+  }: {
+    batchId: string;
+    userId: string;
+    accountId: string;
+    phaseId?: string | null;
+    trades: Partial<Trade>[];
+    finalStatus?: 'completed' | 'completed_with_warnings';
+  }): Promise<{ insertedCount: number; batchId: string }> => {
+    // 1. Validate Batch
+    const batch = importBatches.find(b => b.id === batchId && (b.user_id === userId || userId === 'guest-demo-user'));
+    if (!batch) {
+      throw new Error('دسته ورود معتبر نیست یا متعلق به شما نمی‌باشد');
+    }
+    if (batch.status !== 'processing') {
+      throw new Error(`دسته ورود در وضعیت معتبر برای ثبت اطلاعات نیست (وضعیت فعلی: ${batch.status})`);
+    }
+
+    // 2. Validate Account
+    const account = accounts.find(a => a.id === accountId && (a.user_id === userId || userId === 'guest-demo-user'));
+    if (!account) {
+      throw new Error('حساب معاملاتی معتبر نیست یا متعلق به شما نمی‌باشد');
+    }
+
+    // 3. Validate Phase ownership
+    if (phaseId) {
+      const phase = phases.find(p => p.id === phaseId && p.account_id === accountId);
+      if (!phase) {
+        throw new Error('فاز معاملاتی انتخاب شده متعلق به حساب معاملاتی مورد نظر نیست');
+      }
+    }
+
+    // 4. Validate trades & idempotency against existing trades in this account
+    const existingAccountTrades = trades.filter(t => t.account_id === accountId);
+    const existingMT4Tickets = new Set(existingAccountTrades.filter(t => t.source === 'mt4' && t.ticket).map(t => t.ticket!));
+    const existingMT5Positions = new Set(existingAccountTrades.filter(t => t.source === 'mt5' && t.position_id).map(t => t.position_id!));
+
+    const inserted: Trade[] = [];
+    for (const t of newTrades) {
+      if (!t.symbol || !t.symbol.trim()) {
+        throw new Error('نماد معامله نمی‌تواند خالی باشد');
+      }
+      if (!t.side || !['buy', 'sell'].includes(t.side)) {
+        throw new Error('جهت معامله الزامی است');
+      }
+      if (!t.volume || t.volume <= 0) {
+        throw new Error('حجم معامله باید مقداری مثبت باشد');
+      }
+      if (!t.entry_datetime) {
+        throw new Error('زمان ورود معامله الزامی است');
+      }
+
+      // Check trade-level phase
+      if (t.phase_id) {
+        const ph = phases.find(p => p.id === t.phase_id && p.account_id === accountId);
+        if (!ph) {
+          throw new Error(`فاز معاملاتی انتخاب شده (${t.phase_id}) متعلق به حساب معاملاتی مورد نظر نیست`);
+        }
+      }
+
+      // Check unique constraint violation
+      if (t.source === 'mt4' && t.ticket && existingMT4Tickets.has(t.ticket)) {
+        throw new Error(`معامله تکراری MT4 با شماره تیکت ${t.ticket} در این حساب وجود دارد`);
+      }
+      if (t.source === 'mt5' && t.position_id && existingMT5Positions.has(t.position_id)) {
+        throw new Error(`معامله تکراری MT5 با شناسه پوزیشن ${t.position_id} در این حساب وجود دارد`);
+      }
+
+      if (t.source === 'mt4' && t.ticket) existingMT4Tickets.add(t.ticket);
+      if (t.source === 'mt5' && t.position_id) existingMT5Positions.add(t.position_id);
+
+      const durSec = t.entry_datetime && t.exit_datetime
+        ? Math.max(0, Math.round((new Date(t.exit_datetime).getTime() - new Date(t.entry_datetime).getTime()) / 1000))
+        : 0;
+
+      inserted.push({
+        id: `trade-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        user_id: userId,
+        account_id: accountId,
+        phase_id: t.phase_id || phaseId || null,
+        import_batch_id: batchId,
+        ticket: t.ticket || null,
+        position_id: t.position_id || null,
+        symbol: t.symbol.trim(),
+        side: t.side,
+        volume: t.volume,
+        entry_datetime: t.entry_datetime,
+        entry_price: t.entry_price || 0,
+        stop_loss: t.stop_loss || null,
+        take_profit: t.take_profit || null,
+        exit_datetime: t.exit_datetime || t.entry_datetime,
+        exit_price: t.exit_price || 0,
+        commission: t.commission || 0,
+        swap: t.swap || 0,
+        profit: t.profit || 0,
+        comment: t.comment || null,
+        magic_number: t.magic_number || null,
+        source: t.source || 'mt5',
+        source_file: t.source_file || null,
+        duration_seconds: durSec,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    // Atomic commit: only commit trades and update batch if ALL trades passed
+    trades = [...trades, ...inserted];
+    saveToStorage('trades', trades);
+
+    importBatches = importBatches.map(b =>
+      b.id === batchId
+        ? {
+            ...b,
+            imported_rows: inserted.length,
+            status: finalStatus,
+            completed_at: new Date().toISOString(),
+          }
+        : b
+    );
+    saveToStorage('import_batches', importBatches);
+
+    return { insertedCount: inserted.length, batchId };
+  },
+
   // Dashboard Layout
   getDefaultDashboardLayout: async (userId: string): Promise<DashboardLayout> => {
     const saved = loadFromStorage<DashboardLayout | null>('dashboard_layout', null);

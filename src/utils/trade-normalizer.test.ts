@@ -155,7 +155,7 @@ describe('Trade Normalizer', () => {
     };
 
     it('parses in, out, inout, and out_by correctly', () => {
-      const inRes = normalizeTradeRow ? parseMT5DealRow({ ...baseRow, Entry: 'in' }, 1) : null;
+      const inRes = parseMT5DealRow({ ...baseRow, Entry: 'in' }, 1);
       expect(inRes?.deal?.entry).toBe('in');
 
       const outRes = parseMT5DealRow({ ...baseRow, Entry: 'out' }, 1);
@@ -164,11 +164,22 @@ describe('Trade Normalizer', () => {
       const inoutRes = parseMT5DealRow({ ...baseRow, Entry: 'inout' }, 1);
       expect(inoutRes.deal?.entry).toBe('inout');
 
-      const outByRes = parseMT5DealRow({ ...baseRow, Entry: 'out_by' }, 1);
+      // OUT_BY with structured Position By column
+      const outByRes = parseMT5DealRow({ ...baseRow, Entry: 'out_by', 'Position By': '300' }, 1);
       expect(outByRes.deal?.entry).toBe('out_by');
+      expect(outByRes.deal?.position_by_id).toBe('300');
 
-      const closeByRes = parseMT5DealRow({ ...baseRow, Entry: 'close by' }, 1);
+      const closeByRes = parseMT5DealRow({ ...baseRow, Entry: 'close by', position_by_id: '400' }, 1);
       expect(closeByRes.deal?.entry).toBe('out_by');
+      expect(closeByRes.deal?.position_by_id).toBe('400');
+    });
+
+    it('rejects out_by deals that lack an authoritative position_by_id column', () => {
+      const res = parseMT5DealRow({ ...baseRow, Entry: 'out_by' }, 1);
+      expect(res.deal).toBeNull();
+      expect(res.errors.length).toBeGreaterThan(0);
+      expect(res.errors[0].field).toBe('position_by_id');
+      expect(res.errors[0].message).toContain('فاقد ستون ساختاریافته شناسه پوزیشن مقابل');
     });
 
     it('rejects unknown entry values with an explicit validation error', () => {

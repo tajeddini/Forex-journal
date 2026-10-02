@@ -4,7 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getAccounts } from '../../services/accounts';
 import { getPhases } from '../../services/accountPhases';
 import { createImportBatch, completeImportBatch, failImportBatch, rollbackAndFailImportBatch } from '../../services/importBatches';
-import { createTradesBatch, checkDuplicateTrades } from '../../services/trades';
+import { createTradesBatch, checkDuplicateTrades, executeAtomicTradeImport } from '../../services/trades';
 import type { TradingAccount, AccountPhase, TradeSource, TradeInsert } from '../../types/database';
 import { parseCSV, validateCSVFile, readFileAsText, detectDelimiter } from '../../utils/csv-parser';
 import { mapColumns, normalizeTradeRow, detectTradeSource, parseMT5DealRow, type NormalizedTrade } from '../../utils/trade-normalizer';
@@ -243,27 +243,33 @@ export default function ImportPage() {
         source_file: state.file!.name,
       }));
 
-      // Batch insert (chunks of 500)
-      const chunkSize = 500;
-      for (let i = 0; i < tradeInserts.length; i += chunkSize) {
-        const chunk = tradeInserts.slice(i, i + chunkSize);
-        await createTradesBatch(chunk);
-        importedCount += chunk.length;
-      }
-
-      // Complete batch
+      // Determine final status
       const status = state.invalidRows.length > 0 || state.duplicates.size > 0
         ? 'completed_with_warnings'
         : 'completed';
 
-      await completeImportBatch(batch.id, user.id, {
-        total_rows: state.rows.length,
-        valid_rows: state.normalizedTrades.length,
-        invalid_rows: state.invalidRows.length,
-        duplicate_rows: state.duplicates.size,
-        imported_rows: importedCount,
-        status,
-      });
+      if (tradeInserts.length > 0) {
+        // Full atomic import: insert all trades and complete batch within a single database transaction
+        const importRes = await executeAtomicTradeImport({
+          batchId: batch.id,
+          userId: user.id,
+          accountId: state.account.id,
+          phaseId: state.phase?.id || null,
+          trades: tradeInserts,
+          finalStatus: status,
+        });
+        importedCount = importRes.insertedCount;
+      } else {
+        // No trades to insert (e.g. all rows were invalid or duplicates)
+        await completeImportBatch(batch.id, user.id, {
+          total_rows: state.rows.length,
+          valid_rows: state.normalizedTrades.length,
+          invalid_rows: state.invalidRows.length,
+          duplicate_rows: state.duplicates.size,
+          imported_rows: 0,
+          status,
+        });
+      }
 
       setState(prev => ({
         ...prev,

@@ -9,6 +9,7 @@ import type { MT5Deal } from './mt5-aggregation';
 export interface NormalizedTrade {
   ticket: string | null;
   position_id: string | null;
+  position_by_id?: string | null;
   symbol: string;
   side: TradeSide;
   volume: number;
@@ -288,6 +289,30 @@ export function parseMT5DealRow(
     }
   }
 
+  // Authoritative opposite position ID for Close By (out_by)
+  const positionById = findVal([
+    'position by',
+    'position_by',
+    'positionby',
+    'position_by_id',
+    'position by id',
+    'opposite position',
+    'opposite_position',
+    'close by position',
+    'close_by_position',
+    'opposite position id',
+  ]) || undefined;
+
+  // Strict validation: OUT_BY deal must have an authoritative opposite position ID from structured columns
+  if (validatedEntry === 'out_by' && !positionById) {
+    errors.push({
+      row: rowNumber,
+      field: 'position_by_id',
+      message: 'معامله خروج Close By (out_by) فاقد ستون ساختاریافته شناسه پوزیشن مقابل (Position By) است. فرمت بدون ستون شناسه پوزیشن مقابل جهت جلوگیری از حدس اشتباه پشتیبانی نمی‌شود.',
+    });
+    return { deal: null, errors };
+  }
+
   const commission = normalizeNumber(findVal(['commission'])) || 0;
   const swap = normalizeNumber(findVal(['swap'])) || 0;
   const profit = normalizeNumber(findVal(['profit'])) || 0;
@@ -297,6 +322,7 @@ export function parseMT5DealRow(
   const deal: MT5Deal = {
     ticket: dealId,
     position_id: positionId,
+    position_by_id: positionById?.trim() || undefined,
     order_id: orderId,
     deal_id: dealId,
     symbol: symbol.trim(),

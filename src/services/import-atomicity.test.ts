@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createImportBatch, completeImportBatch, rollbackAndFailImportBatch, getImportBatch } from './importBatches';
-import { deleteTradesByBatchId, createTradesBatch } from './trades';
+import { deleteTradesByBatchId, createTradesBatch, executeAtomicTradeImport } from './trades';
 import { MockStorage } from './mockStorage';
 import { findDuplicates } from '../utils/duplicate-detector';
 import type { TradeInsert } from '../types/database';
@@ -584,5 +584,308 @@ describe('Import Atomicity, Rollback & Idempotency', () => {
 
     const trades = await MockStorage.getTrades({ accountId });
     expect(trades.some(t => t.import_batch_id === testBatchId)).toBe(false);
+  });
+
+  it('12. executes full atomic import in a single transaction (inserts trades AND completes batch)', async () => {
+    const batch = await createImportBatch({
+      user_id: userId,
+      account_id: accountId,
+      source: 'mt5',
+      file_name: 'atomic_success.csv',
+      file_size: 2048,
+      total_rows: 3,
+      valid_rows: 3,
+      invalid_rows: 0,
+      duplicate_rows: 0,
+      imported_rows: 0,
+      status: 'processing',
+    });
+
+    const tradesToImport: TradeInsert[] = [
+      {
+        user_id: userId,
+        account_id: accountId,
+        import_batch_id: batch.id,
+        position_id: 'ATOMIC_POS_1',
+        symbol: 'EURUSD',
+        side: 'buy',
+        volume: 1.0,
+        entry_datetime: '2024-01-15T10:00:00Z',
+        entry_price: 1.1000,
+        exit_datetime: '2024-01-15T12:00:00Z',
+        exit_price: 1.1050,
+        profit: 50,
+        source: 'mt5',
+      },
+      {
+        user_id: userId,
+        account_id: accountId,
+        import_batch_id: batch.id,
+        position_id: 'ATOMIC_POS_2',
+        symbol: 'GBPUSD',
+        side: 'sell',
+        volume: 0.5,
+        entry_datetime: '2024-01-15T11:00:00Z',
+        entry_price: 1.2500,
+        exit_datetime: '2024-01-15T13:00:00Z',
+        exit_price: 1.2450,
+        profit: 25,
+        source: 'mt5',
+      },
+      {
+        user_id: userId,
+        account_id: accountId,
+        import_batch_id: batch.id,
+        position_id: 'ATOMIC_POS_3',
+        symbol: 'XAUUSD',
+        side: 'buy',
+        volume: 0.1,
+        entry_datetime: '2024-01-15T12:00:00Z',
+        entry_price: 2000.0,
+        exit_datetime: '2024-01-15T14:00:00Z',
+        exit_price: 2010.0,
+        profit: 100,
+        source: 'mt5',
+      },
+    ];
+
+    const result = await executeAtomicTradeImport({
+      batchId: batch.id,
+      userId,
+      accountId,
+      trades: tradesToImport,
+      finalStatus: 'completed',
+    });
+
+    expect(result.insertedCount).toBe(3);
+
+    // Verify batch is completed
+    const updatedBatch = await getImportBatch(batch.id, userId);
+    expect(updatedBatch?.status).toBe('completed');
+    expect(updatedBatch?.imported_rows).toBe(3);
+
+    // Verify all 3 trades are in storage
+    const storedTrades = await MockStorage.getTrades({ accountId });
+    const batchTrades = storedTrades.filter(t => t.import_batch_id === batch.id);
+    expect(batchTrades).toHaveLength(3);
+  });
+
+  it('13. transaction fails atomically on duplicate MT5 position ID without inserting partial records', async () => {
+    const batch = await createImportBatch({
+      user_id: userId,
+      account_id: accountId,
+      source: 'mt5',
+      file_name: 'atomic_fail_dupe.csv',
+      file_size: 2048,
+      total_rows: 3,
+      valid_rows: 3,
+      invalid_rows: 0,
+      duplicate_rows: 0,
+      imported_rows: 0,
+      status: 'processing',
+    });
+
+    const tradesWithDuplicate: TradeInsert[] = [
+      {
+        user_id: userId,
+        account_id: accountId,
+        import_batch_id: batch.id,
+        position_id: 'ATOMIC_POS_1', // Already inserted in test 12!
+        symbol: 'EURUSD',
+        side: 'buy',
+        volume: 1.0,
+        entry_datetime: '2024-01-15T10:00:00Z',
+        entry_price: 1.1000,
+        exit_datetime: '2024-01-15T12:00:00Z',
+        exit_price: 1.1050,
+        profit: 50,
+        source: 'mt5',
+      },
+      {
+        user_id: userId,
+        account_id: accountId,
+        import_batch_id: batch.id,
+        position_id: 'ATOMIC_POS_NEW_UNIQUE',
+        symbol: 'GBPUSD',
+        side: 'sell',
+        volume: 0.5,
+        entry_datetime: '2024-01-15T11:00:00Z',
+        entry_price: 1.2500,
+        exit_datetime: '2024-01-15T13:00:00Z',
+        exit_price: 1.2450,
+        profit: 25,
+        source: 'mt5',
+      },
+    ];
+
+    await expect(
+      executeAtomicTradeImport({
+        batchId: batch.id,
+        userId,
+        accountId,
+        trades: tradesWithDuplicate,
+        finalStatus: 'completed',
+      })
+    ).rejects.toThrow('معامله تکراری MT5');
+
+    // Verify ZERO trades were committed for this batch
+    const storedTrades = await MockStorage.getTrades({ accountId });
+    const batchTrades = storedTrades.filter(t => t.import_batch_id === batch.id);
+    expect(batchTrades).toHaveLength(0);
+
+    // Verify batch was NOT marked completed
+    const batchRecord = await getImportBatch(batch.id, userId);
+    expect(batchRecord?.status).toBe('processing');
+  });
+
+  it('14. cross-user account ownership: rejects import into an account belonging to another user', async () => {
+    const batch = await createImportBatch({
+      user_id: userId,
+      account_id: accountId,
+      source: 'mt5',
+      file_name: 'cross_user.csv',
+      file_size: 512,
+      total_rows: 1,
+      valid_rows: 1,
+      invalid_rows: 0,
+      duplicate_rows: 0,
+      imported_rows: 0,
+      status: 'processing',
+    });
+
+    await expect(
+      executeAtomicTradeImport({
+        batchId: batch.id,
+        userId: 'attacker-user-id',
+        accountId,
+        trades: [
+          {
+            user_id: 'attacker-user-id',
+            account_id: accountId,
+            import_batch_id: batch.id,
+            position_id: 'POS_SPOOF',
+            symbol: 'EURUSD',
+            side: 'buy',
+            volume: 1.0,
+            entry_datetime: '2024-01-15T10:00:00Z',
+            entry_price: 1.1,
+            exit_datetime: '2024-01-15T12:00:00Z',
+            exit_price: 1.105,
+            profit: 50,
+            source: 'mt5',
+          },
+        ],
+      })
+    ).rejects.toThrow('دسته ورود معتبر نیست');
+  });
+
+  it('15. cross-entity phase ownership: rejects import with a phase belonging to a different account', async () => {
+    const batch = await createImportBatch({
+      user_id: userId,
+      account_id: accountId,
+      source: 'mt5',
+      file_name: 'bad_phase.csv',
+      file_size: 512,
+      total_rows: 1,
+      valid_rows: 1,
+      invalid_rows: 0,
+      duplicate_rows: 0,
+      imported_rows: 0,
+      status: 'processing',
+    });
+
+    await expect(
+      executeAtomicTradeImport({
+        batchId: batch.id,
+        userId,
+        accountId,
+        phaseId: 'phase-from-unrelated-account-999',
+        trades: [
+          {
+            user_id: userId,
+            account_id: accountId,
+            phase_id: 'phase-from-unrelated-account-999',
+            import_batch_id: batch.id,
+            position_id: 'POS_PHASE_ATTACK',
+            symbol: 'EURUSD',
+            side: 'buy',
+            volume: 1.0,
+            entry_datetime: '2024-01-15T10:00:00Z',
+            entry_price: 1.1,
+            exit_datetime: '2024-01-15T12:00:00Z',
+            exit_price: 1.105,
+            profit: 50,
+            source: 'mt5',
+          },
+        ],
+      })
+    ).rejects.toThrow('فاز معاملاتی انتخاب شده');
+  });
+
+  it('16. batch state guard: rejects import into an already completed or failed batch', async () => {
+    const batch = await createImportBatch({
+      user_id: userId,
+      account_id: accountId,
+      source: 'mt5',
+      file_name: 'completed_batch.csv',
+      file_size: 512,
+      total_rows: 1,
+      valid_rows: 1,
+      invalid_rows: 0,
+      duplicate_rows: 0,
+      imported_rows: 1,
+      status: 'completed',
+    });
+
+    await expect(
+      executeAtomicTradeImport({
+        batchId: batch.id,
+        userId,
+        accountId,
+        trades: [
+          {
+            user_id: userId,
+            account_id: accountId,
+            import_batch_id: batch.id,
+            position_id: 'POS_LATE_INJECT',
+            symbol: 'EURUSD',
+            side: 'buy',
+            volume: 1.0,
+            entry_datetime: '2024-01-15T10:00:00Z',
+            entry_price: 1.1,
+            exit_datetime: '2024-01-15T12:00:00Z',
+            exit_price: 1.105,
+            profit: 50,
+            source: 'mt5',
+          },
+        ],
+      })
+    ).rejects.toThrow('دسته ورود در وضعیت معتبر برای ثبت اطلاعات نیست');
+  });
+
+  it('17. enforces maximum atomic payload threshold (rejects > 5000 trades)', async () => {
+    const hugeTrades: TradeInsert[] = Array.from({ length: 5001 }).map((_, i) => ({
+      user_id: userId,
+      account_id: accountId,
+      import_batch_id: 'batch-huge',
+      symbol: 'EURUSD',
+      side: 'buy',
+      volume: 1.0,
+      entry_datetime: '2024-01-01T00:00:00Z',
+      exit_datetime: '2024-01-01T01:00:00Z',
+      entry_price: 1.1,
+      exit_price: 1.11,
+      profit: 10,
+      source: 'mt5',
+    }));
+
+    await expect(
+      executeAtomicTradeImport({
+        batchId: 'batch-huge',
+        userId,
+        accountId,
+        trades: hugeTrades,
+      })
+    ).rejects.toThrow('از حداکثر مجاز (5000) بیشتر است');
   });
 });
