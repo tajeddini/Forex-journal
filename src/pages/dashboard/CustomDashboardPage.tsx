@@ -7,8 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getDashboardAnalytics, fetchAccounts } from '../../services/analytics';
 import { calculateCoreMetrics } from '../../services/analytics/metrics';
-import { calculateEquityCurve, calculateDrawdown } from '../../services/analytics/equity';
-import { aggregateByTime, calculatePerformanceBreakdown } from '../../services/analytics/aggregation';
+import { calculateDrawdown } from '../../services/analytics/equity';
 import type { DashboardWidget, DashboardLayout } from '../../types/database';
 import { DEFAULT_DASHBOARD_WIDGETS, getDefaultDashboardLayout, updateDashboardLayout } from '../../services/dashboard';
 import { Card, CardTitle, CardHeader } from '../../components/ui/Card';
@@ -97,28 +96,33 @@ export default function CustomDashboardPage() {
     loadData();
   }, [user, selectedAccountId]);
 
-  // Get starting balance from selected account or all accounts
-  const startingBalance = useMemo(() => {
-    if (selectedAccountId) {
-      // Selected account: use its initial balance
-      const account = accounts.find(a => a.id === selectedAccountId);
-      return account?.initial_balance || 0;
-    } else if (accounts.length > 0) {
-      // All accounts: sum initial balances
-      // Note: This assumes all accounts use the same currency
-      // In a multi-currency scenario, this would need conversion
-      return accounts.reduce((sum, acc) => sum + (acc.initial_balance || 0), 0);
-    }
-    return 0;
-  }, [selectedAccountId, accounts]);
+  const metrics = dashboardAnalytics?.metrics || {
+    totalTrades: 0,
+    winningTrades: 0,
+    losingTrades: 0,
+    breakevenTrades: 0,
+    winRate: null,
+    netPnl: 0,
+    grossProfit: 0,
+    grossLoss: 0,
+    profitFactor: null,
+    averageWin: null,
+    averageLoss: null,
+    expectancy: null,
+  };
 
-  // Calculate metrics
-  const metrics = useMemo(() => calculateCoreMetrics(trades), [trades]);
-  const equity = useMemo(() => calculateEquityCurve(trades, startingBalance), [trades, startingBalance]);
+  const equity = dashboardAnalytics?.equity || {
+    points: [],
+    startingBalance: 0,
+    endingBalance: 0,
+    netChange: 0,
+    returnPercent: null,
+  };
+
   const drawdown = useMemo(() => calculateDrawdown(equity), [equity]);
-  const dailyPnl = useMemo(() => aggregateByTime(trades, 'daily'), [trades]);
-  const symbolPerformance = useMemo(() => calculatePerformanceBreakdown(trades, t => t.symbol), [trades]);
-  const sidePerformance = useMemo(() => calculatePerformanceBreakdown(trades, t => t.side), [trades]);
+  const dailyPnl = dashboardAnalytics?.dailyPnl || [];
+  const symbolPerformance = dashboardAnalytics?.symbolPerformance || [];
+  const sidePerformance = dashboardAnalytics?.sidePerformance || [];
 
   // Save layout
   const saveLayout = async (newWidgets: DashboardWidget[]) => {
