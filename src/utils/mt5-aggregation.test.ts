@@ -269,14 +269,23 @@ describe('MT5 Aggregation Engine', () => {
 
       const result = aggregateMT5DealsDetailed(deals);
       expect(result.closedPositions).toHaveLength(1);
-      expect(result.openPositions).toHaveLength(0);
+      expect(result.openPositions).toHaveLength(1);
 
       const pos = result.closedPositions[0];
+      expect(pos.side).toBe('buy');
       expect(pos.closed_volume).toBe(1.0);
       expect(pos.remaining_open_volume).toBe(0);
       expect(pos.weighted_entry_price).toBe(1.1000);
       expect(pos.weighted_exit_price).toBe(1.1060);
       expect(pos.total_profit).toBe(600);
+
+      const openPos = result.openPositions[0];
+      expect(openPos.side).toBe('sell');
+      expect(openPos.total_volume).toBe(1.0);
+      expect(openPos.remaining_open_volume).toBe(1.0);
+      expect(openPos.weighted_entry_price).toBe(1.1060);
+      expect(openPos.is_still_open).toBe(true);
+      expect(openPos.position_id).not.toBe('POS_BUY_EQ');
     });
 
     it('3. BUY -> INOUT larger volume (BUY 1.00, INOUT SELL 1.50)', () => {
@@ -408,11 +417,19 @@ describe('MT5 Aggregation Engine', () => {
 
       const result = aggregateMT5DealsDetailed(deals);
       expect(result.closedPositions).toHaveLength(1);
-      expect(result.openPositions).toHaveLength(0);
+      expect(result.openPositions).toHaveLength(1);
       const closedPos = result.closedPositions[0];
       expect(closedPos.side).toBe('sell');
       expect(closedPos.closed_volume).toBe(1.0);
       expect(closedPos.total_profit).toBe(1000);
+
+      const openPos = result.openPositions[0];
+      expect(openPos.side).toBe('buy');
+      expect(openPos.total_volume).toBe(1.0);
+      expect(openPos.remaining_open_volume).toBe(1.0);
+      expect(openPos.weighted_entry_price).toBe(1.2900);
+      expect(openPos.is_still_open).toBe(true);
+      expect(openPos.position_id).not.toBe('POS_SELL_EQ');
     });
 
     it('6. SELL -> INOUT larger volume (SELL 1.00, INOUT BUY 1.50)', () => {
@@ -513,6 +530,117 @@ describe('MT5 Aggregation Engine', () => {
       expect(openSell.total_commission).toBe(-5);
       expect(openSell.total_swap).toBe(0);
       expect(openSell.total_profit).toBe(0);
+    });
+
+    it('handles mandatory 4-step reversal sequence (BUY 1.00 -> INOUT SELL 1.50 -> INOUT BUY 0.70 -> INOUT SELL 1.20)', () => {
+      const deals: MT5Deal[] = [
+        {
+          position_id: 'POS_MULTIREV',
+          symbol: 'EURUSD',
+          side: 'buy',
+          volume: 1.0,
+          price: 1.1000,
+          datetime: '2024-01-01T10:00:00.000Z',
+          commission: -5,
+          swap: 0,
+          profit: 0,
+          type: 'in',
+          entry: 'in',
+        },
+        {
+          position_id: 'POS_MULTIREV',
+          symbol: 'EURUSD',
+          side: 'sell',
+          volume: 1.5,
+          price: 1.1050,
+          datetime: '2024-01-01T11:00:00.000Z',
+          commission: -15,
+          swap: 0,
+          profit: 500,
+          type: 'inout',
+          entry: 'inout',
+        },
+        {
+          position_id: 'POS_MULTIREV',
+          symbol: 'EURUSD',
+          side: 'buy',
+          volume: 0.7,
+          price: 1.1020,
+          datetime: '2024-01-01T12:30:00.000Z',
+          commission: -7,
+          swap: -1,
+          profit: 150,
+          type: 'inout',
+          entry: 'inout',
+        },
+        {
+          position_id: 'POS_MULTIREV',
+          symbol: 'EURUSD',
+          side: 'sell',
+          volume: 1.2,
+          price: 1.1080,
+          datetime: '2024-01-01T14:00:00.000Z',
+          commission: -12,
+          swap: 0,
+          profit: 120,
+          type: 'inout',
+          entry: 'inout',
+        },
+      ];
+
+      const result = aggregateMT5DealsDetailed(deals);
+
+      // 3 closed positions created chronologically
+      expect(result.closedPositions).toHaveLength(3);
+
+      // Pos 1: Initial BUY 1.00 lot closed by first INOUT
+      const pos1 = result.closedPositions[0];
+      expect(pos1.side).toBe('buy');
+      expect(pos1.closed_volume).toBe(1.0);
+      expect(pos1.remaining_open_volume).toBe(0);
+      expect(pos1.weighted_entry_price).toBe(1.1000);
+      expect(pos1.weighted_exit_price).toBe(1.1050);
+      expect(pos1.entry_datetime).toBe('2024-01-01T10:00:00.000Z');
+      expect(pos1.exit_datetime).toBe('2024-01-01T11:00:00.000Z');
+      const dur1 = (new Date(pos1.exit_datetime).getTime() - new Date(pos1.entry_datetime).getTime()) / 1000;
+      expect(dur1).toBe(3600); // 1 hour
+      expect(pos1.total_profit).toBe(500);
+
+      // Pos 2: Reversed SELL 0.50 lot closed by second INOUT
+      const pos2 = result.closedPositions[1];
+      expect(pos2.side).toBe('sell');
+      expect(pos2.closed_volume).toBe(0.5);
+      expect(pos2.remaining_open_volume).toBe(0);
+      expect(pos2.weighted_entry_price).toBe(1.1050);
+      expect(pos2.weighted_exit_price).toBe(1.1020);
+      expect(pos2.entry_datetime).toBe('2024-01-01T11:00:00.000Z');
+      expect(pos2.exit_datetime).toBe('2024-01-01T12:30:00.000Z');
+      const dur2 = (new Date(pos2.exit_datetime).getTime() - new Date(pos2.entry_datetime).getTime()) / 1000;
+      expect(dur2).toBe(5400); // 1.5 hours
+      expect(pos2.total_profit).toBe(150);
+
+      // Pos 3: Reversed BUY 0.20 lot closed by third INOUT
+      const pos3 = result.closedPositions[2];
+      expect(pos3.side).toBe('buy');
+      expect(pos3.closed_volume).toBe(0.2);
+      expect(pos3.remaining_open_volume).toBe(0);
+      expect(pos3.weighted_entry_price).toBe(1.1020);
+      expect(pos3.weighted_exit_price).toBe(1.1080);
+      expect(pos3.entry_datetime).toBe('2024-01-01T12:30:00.000Z');
+      expect(pos3.exit_datetime).toBe('2024-01-01T14:00:00.000Z');
+      const dur3 = (new Date(pos3.exit_datetime).getTime() - new Date(pos3.entry_datetime).getTime()) / 1000;
+      expect(dur3).toBe(5400); // 1.5 hours
+      expect(pos3.total_profit).toBe(120);
+
+      // 1 open position remaining: SELL 1.00 lot
+      expect(result.openPositions).toHaveLength(1);
+      const openPos = result.openPositions[0];
+      expect(openPos.side).toBe('sell');
+      expect(openPos.total_volume).toBe(1.0);
+      expect(openPos.remaining_open_volume).toBe(1.0);
+      expect(openPos.weighted_entry_price).toBe(1.1080);
+      expect(openPos.entry_datetime).toBe('2024-01-01T14:00:00.000Z');
+      expect(openPos.is_still_open).toBe(true);
     });
 
     it('segregates different position IDs cleanly without leakage', () => {

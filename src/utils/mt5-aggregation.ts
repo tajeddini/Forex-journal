@@ -176,9 +176,9 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
     const finalizePos = (state: ActivePosState, isStillOpen: boolean): AggregatedPosition => {
       const inVols = state.inDeals.reduce((sum, d) => sum + d.volume, 0);
       const outVols = state.outDeals.reduce((sum, d) => sum + d.volume, 0);
-      const totalVolume = inVols > 0 ? inVols : outVols;
-      const closedVolume = isStillOpen ? 0 : (outVols > 0 ? Math.min(totalVolume, outVols) : 0);
-      const remainingOpen = Math.max(0, state.openVolume !== undefined ? state.openVolume : totalVolume - outVols);
+      const totalVolume = Number((inVols > 0 ? inVols : outVols).toFixed(6));
+      const closedVolume = Number((isStillOpen ? 0 : (outVols > 0 ? Math.min(totalVolume, outVols) : 0)).toFixed(6));
+      const remainingOpen = Number((Math.max(0, state.openVolume !== undefined ? state.openVolume : totalVolume - outVols)).toFixed(6));
 
       const weightedEntry =
         inVols > 0
@@ -339,7 +339,7 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
             // Smaller volume (e.g. BUY 1.00, INOUT SELL 0.40):
             // Closes 0.40 of BUY, keeps 0.60 BUY open, and opens new SELL 0.40
             const closedVol: number = deal.volume;
-            const remainingOldVol: number = activePos.openVolume - closedVol;
+            const remainingOldVol: number = Number((activePos.openVolume - closedVol).toFixed(6));
 
             const closingDealPart: MT5Deal = {
               ...deal,
@@ -399,13 +399,13 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
             };
           } else if (isEqual) {
             // Equal volume (e.g. BUY 1.00, INOUT SELL 1.00):
-            // Closes existing position completely
+            // Closes existing position completely AND opens new opposite position
             const closedVol: number = activePos.openVolume;
             const closingDealPart: MT5Deal = {
               ...deal,
               volume: closedVol,
               profit: deal.profit,
-              commission: deal.commission || 0,
+              commission: (deal.commission || 0) * 0.5,
               swap: deal.swap || 0,
               entry: 'out',
               type: 'out',
@@ -413,12 +413,36 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
             activePos.outDeals.push(closingDealPart);
             activePos.openVolume = 0;
             closedPositions.push(finalizePos(activePos, false));
-            activePos = null;
+
+            // Open new opposite position with unique identity
+            const newPosId = `${positionKey}_rev_${deal.deal_id || i}`;
+            const openingDealPart: MT5Deal = {
+              ...deal,
+              volume: deal.volume,
+              profit: 0,
+              commission: (deal.commission || 0) * 0.5,
+              swap: 0,
+              entry: 'in',
+              type: 'in',
+              side: deal.side,
+              position_id: newPosId,
+              ticket: `${deal.ticket || deal.deal_id || positionKey}_rev`,
+            };
+
+            activePos = {
+              ticket: openingDealPart.ticket!,
+              position_id: newPosId,
+              symbol: deal.symbol,
+              side: deal.side,
+              inDeals: [openingDealPart],
+              outDeals: [],
+              openVolume: deal.volume,
+            };
           } else {
             // Larger volume (e.g. BUY 1.00, INOUT SELL 1.50):
             // Closes existing BUY 1.00 completely and opens new SELL 0.50
             const closedVol: number = activePos.openVolume;
-            const remainingNewVol: number = deal.volume - closedVol;
+            const remainingNewVol: number = Number((deal.volume - closedVol).toFixed(6));
             const closeRatio: number = closedVol / deal.volume;
             const openRatio: number = remainingNewVol / deal.volume;
 
