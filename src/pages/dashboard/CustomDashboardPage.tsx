@@ -64,11 +64,9 @@ export default function CustomDashboardPage() {
 
     const loadData = async () => {
       try {
-        // Start independent dashboard requests together to avoid a network waterfall.
-        const [savedLayout, accountsData, rawTrades] = await Promise.all([
+        const [savedLayout, accountsData] = await Promise.all([
           getDefaultDashboardLayout(user.id),
           fetchAccounts(user.id),
-          fetchDashboardTrades(user.id, { accountId: selectedAccountId }),
         ]);
 
         if (savedLayout) {
@@ -78,7 +76,17 @@ export default function CustomDashboardPage() {
 
         setAccounts(accountsData);
         setAccountCount(accountsData.length);
-        setTrades(classifyTrades(rawTrades));
+
+        const startingBalance = selectedAccountId
+          ? (accountsData.find(a => a.id === selectedAccountId)?.initial_balance || 0)
+          : accountsData.reduce((sum, acc) => sum + (acc.initial_balance || 0), 0);
+
+        const analytics = await getDashboardAnalytics(
+          user.id,
+          selectedAccountId,
+          startingBalance
+        );
+        setDashboardAnalytics(analytics);
       } catch (err) {
         console.error('Error loading dashboard:', err);
       } finally {
