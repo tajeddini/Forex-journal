@@ -27,7 +27,7 @@ export async function createProfile(input: ProfileInsert): Promise<Profile> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .insert(input)
+    .upsert(input, { onConflict: 'id' })
     .select()
     .single();
 
