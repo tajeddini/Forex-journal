@@ -17,8 +17,14 @@ export interface DuplicateTradeInfo {
  * For manual trades: uses full composite attributes including comments to prevent false collision
  * between legitimate trades with identical entry prices.
  */
-export function generateTradeFingerprint(trade: NormalizedTrade | Trade): string {
-  const accountId = 'account_id' in trade ? trade.account_id || '' : '';
+export function generateTradeFingerprint(
+  trade: NormalizedTrade | Trade,
+  defaultAccountId?: string
+): string {
+  const accountId =
+    'account_id' in trade && trade.account_id
+      ? trade.account_id
+      : defaultAccountId || '';
   const source = 'source' in trade ? trade.source : undefined;
 
   // 1. MT5: Position ID is the definitive broker position identifier
@@ -56,20 +62,22 @@ export function generateTradeFingerprint(trade: NormalizedTrade | Trade): string
  */
 export function findDuplicates(
   newTrades: NormalizedTrade[],
-  existingTrades: Trade[]
+  existingTrades: Trade[],
+  targetAccountId?: string
 ): Map<number, Trade> {
+  const accountId = targetAccountId || existingTrades[0]?.account_id || '';
   const duplicates = new Map<number, Trade>();
   
   // Create fingerprint map of existing trades
   const existingMap = new Map<string, Trade>();
   for (const existing of existingTrades) {
-    const fingerprint = generateTradeFingerprint(existing);
+    const fingerprint = generateTradeFingerprint(existing, accountId);
     existingMap.set(fingerprint, existing);
   }
 
   // Check each new trade
   for (let i = 0; i < newTrades.length; i++) {
-    const fingerprint = generateTradeFingerprint(newTrades[i]);
+    const fingerprint = generateTradeFingerprint(newTrades[i], accountId);
     const existing = existingMap.get(fingerprint);
     if (existing) {
       duplicates.set(i, existing);

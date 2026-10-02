@@ -115,24 +115,56 @@ export async function failImportBatch(
 }
 
 /**
- * Rollback an import batch completely: delete any inserted trades and mark batch as failed
+ * Rollback an import batch completely: delete any inserted trades, verify cleanup, and mark batch as failed
  */
 export async function rollbackAndFailImportBatch(
   batchId: string,
   userId: string,
   error_message: string
 ): Promise<ImportBatch> {
+  let cleanupError: string | null = null;
+
   if (!isSupabaseConfigured || userId === 'guest-demo-user') {
-    await MockStorage.deleteTradesByBatchId(batchId);
-    return failImportBatch(batchId, userId, error_message, 0);
+    try {
+      await MockStorage.deleteTradesByBatchId(batchId);
+    } catch (err) {
+      cleanupError = err instanceof Error ? err.message : 'MockStorage deletion failed';
+    }
+  } else {
+    // Delete all trades linked to this batch
+    const { error: deleteError } = await supabase
+      .from('trades')
+      .delete()
+      .eq('import_batch_id', batchId)
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      cleanupError = deleteError.message;
+    } else {
+      // Verify zero orphaned trades remain
+      const { data: remainingTrades, error: checkError } = await supabase
+        .from('trades')
+        .select('id')
+        .eq('import_batch_id', batchId)
+        .eq('user_id', userId);
+
+      if (checkError) {
+        cleanupError = `بررسی وضعیت پاکسازی معاملات با شکست مواجه شد: ${checkError.message}`;
+      } else if (remainingTrades && remainingTrades.length > 0) {
+        cleanupError = `پاکسازی ناقص: ${remainingTrades.length} معامله از این دسته حذف نشد`;
+      }
+    }
   }
 
-  // Delete all trades linked to this batch
-  await supabase
-    .from('trades')
-    .delete()
-    .eq('import_batch_id', batchId)
-    .eq('user_id', userId);
+  const finalErrorMessage = cleanupError
+    ? `${error_message} | [خطای بحرانی در پاکسازی رکوردهای ناقص]: ${cleanupError}`
+    : error_message;
 
-  return failImportBatch(batchId, userId, error_message, 0);
+  const updatedBatch = await failImportBatch(batchId, userId, finalErrorMessage, 0);
+
+  if (cleanupError) {
+    throw new Error(`خطای بحرانی: ورود اطلاعات شکست خورد (${error_message}) و پاکسازی معاملات ناقص نیز ناموفق بود: ${cleanupError}`);
+  }
+
+  return updatedBatch;
 }

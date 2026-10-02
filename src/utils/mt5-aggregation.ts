@@ -50,6 +50,7 @@ export interface AggregatedPosition {
   deals: MT5Deal[];
   is_partial_close: boolean;
   is_still_open: boolean;
+  close_by_position_id?: string;
 }
 
 export interface MT5AggregationResult {
@@ -167,6 +168,7 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
       inDeals: MT5Deal[];
       outDeals: MT5Deal[];
       openVolume: number;
+      close_by_position_id?: string;
     }
 
     let activePos: ActivePosState | null = null;
@@ -176,7 +178,7 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
       const outVols = state.outDeals.reduce((sum, d) => sum + d.volume, 0);
       const totalVolume = inVols > 0 ? inVols : outVols;
       const closedVolume = isStillOpen ? 0 : (outVols > 0 ? Math.min(totalVolume, outVols) : 0);
-      const remainingOpen = isStillOpen ? totalVolume : Math.max(0, totalVolume - outVols);
+      const remainingOpen = Math.max(0, state.openVolume !== undefined ? state.openVolume : totalVolume - outVols);
 
       const weightedEntry =
         inVols > 0
@@ -184,27 +186,31 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
           : (state.inDeals[0]?.price || state.outDeals[0]?.price || 0);
 
       const weightedExit =
-        outVols > 0
-          ? state.outDeals.reduce((sum, d) => sum + d.price * d.volume, 0) / outVols
-          : (isStillOpen ? 0 : weightedEntry);
+        isStillOpen
+          ? 0
+          : (outVols > 0
+              ? state.outDeals.reduce((sum, d) => sum + d.price * d.volume, 0) / outVols
+              : weightedEntry);
 
-      const allDeals = [...state.inDeals, ...state.outDeals];
-      const totalCommission = allDeals.reduce((sum, d) => sum + (d.commission || 0), 0);
-      const totalSwap = allDeals.reduce((sum, d) => sum + (d.swap || 0), 0);
-      const totalProfit = allDeals.reduce((sum, d) => sum + (d.profit || 0), 0);
+      const allDeals = isStillOpen ? [...state.inDeals] : [...state.inDeals, ...state.outDeals];
+      const totalCommission = isStillOpen
+        ? state.inDeals.reduce((sum, d) => sum + (d.commission || 0), 0)
+        : allDeals.reduce((sum, d) => sum + (d.commission || 0), 0);
+      const totalSwap = isStillOpen ? 0 : allDeals.reduce((sum, d) => sum + (d.swap || 0), 0);
+      const totalProfit = isStillOpen ? 0 : allDeals.reduce((sum, d) => sum + (d.profit || 0), 0);
 
       const inTimes = state.inDeals.map(d => new Date(d.datetime).getTime());
-      const outTimes = state.outDeals.map(d => new Date(d.datetime).getTime());
+      const outTimes = isStillOpen ? [] : state.outDeals.map(d => new Date(d.datetime).getTime());
 
       const entryTime = inTimes.length > 0 ? new Date(Math.min(...inTimes)).toISOString() : (outTimes.length > 0 ? new Date(Math.min(...outTimes)).toISOString() : allDeals[0]?.datetime || '');
-      const exitTime = outTimes.length > 0 ? new Date(Math.max(...outTimes)).toISOString() : '';
+      const exitTime = (!isStillOpen && outTimes.length > 0) ? new Date(Math.max(...outTimes)).toISOString() : '';
 
       return {
         ticket: state.ticket,
         position_id: state.position_id,
         symbol: state.symbol,
         side: state.side,
-        total_volume: totalVolume,
+        total_volume: isStillOpen ? remainingOpen : totalVolume,
         closed_volume: closedVolume,
         remaining_open_volume: remainingOpen,
         entry_datetime: entryTime,
@@ -217,6 +223,7 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
         deals: allDeals,
         is_partial_close: !isStillOpen && remainingOpen > 0.000001,
         is_still_open: isStillOpen,
+        close_by_position_id: isStillOpen ? undefined : state.close_by_position_id,
       };
     };
 
@@ -241,6 +248,42 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
           activePos.openVolume += deal.volume;
         }
       } else if (semantic === 'out' || semantic === 'out_by') {
+        const closeByMatch = deal.comment?.match(/close\s+by\s+#?(\w+)/i);
+        const closeByOtherId = closeByMatch ? closeByMatch[1] : undefined;
+
+        if (semantic === 'out_by' && closeByOtherId) {
+          if (activePos) {
+            activePos.close_by_position_id = closeByOtherId;
+          }
+          // Cross-position linking: If counterpart position exists in export and has no exit deals, synthesize its exit
+          if (positionGroups.has(closeByOtherId)) {
+            const counterpartDeals = positionGroups.get(closeByOtherId)!;
+            const hasExit = counterpartDeals.some(d => {
+              const s = classifyDealDirection(d);
+              return s === 'out' || s === 'out_by';
+            });
+            if (!hasExit && counterpartDeals.length > 0) {
+              const targetEntryDeal = counterpartDeals[0];
+              const syntheticCounterpart: MT5Deal = {
+                position_id: closeByOtherId,
+                ticket: targetEntryDeal.ticket || closeByOtherId,
+                symbol: deal.symbol,
+                side: targetEntryDeal.side === 'buy' ? 'sell' : 'buy',
+                volume: Math.min(targetEntryDeal.volume, deal.volume),
+                price: deal.price,
+                datetime: deal.datetime,
+                commission: 0,
+                swap: 0,
+                profit: 0,
+                entry: 'out_by',
+                type: 'out_by',
+                comment: `close by #${positionKey}`,
+              };
+              counterpartDeals.push(syntheticCounterpart);
+            }
+          }
+        }
+
         if (!activePos || activePos.openVolume <= 0.000001) {
           // Out deal without preceding in deal in export range
           const syntheticIn: MT5Deal = {
@@ -258,12 +301,16 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
             inDeals: [syntheticIn],
             outDeals: [deal],
             openVolume: 0,
+            close_by_position_id: closeByOtherId,
           };
           closedPositions.push(finalizePos(activePos, false));
           activePos = null;
         } else {
           activePos.outDeals.push(deal);
           activePos.openVolume -= deal.volume;
+          if (closeByOtherId) {
+            activePos.close_by_position_id = closeByOtherId;
+          }
 
           if (activePos.openVolume <= 0.000001) {
             // Fully closed
@@ -272,7 +319,7 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
           }
         }
       } else {
-        // INOUT semantic handling: reduction, full close, or reversal
+        // INOUT semantic handling: reversal event
         if (!activePos || activePos.openVolume <= 0.000001) {
           // No active position: starts an entry
           activePos = {
@@ -284,57 +331,136 @@ export function aggregateMT5DealsDetailed(deals: MT5Deal[]): MT5AggregationResul
             outDeals: [],
             openVolume: deal.volume,
           };
-        } else if (deal.volume <= activePos.openVolume + 0.000001) {
-          // Reduction or full close without reversal
-          activePos.outDeals.push(deal);
-          activePos.openVolume -= deal.volume;
+        } else {
+          const isSmaller = deal.volume < activePos.openVolume - 0.000001;
+          const isEqual = Math.abs(deal.volume - activePos.openVolume) <= 0.000001;
 
-          if (activePos.openVolume <= 0.000001) {
+          if (isSmaller) {
+            // Smaller volume (e.g. BUY 1.00, INOUT SELL 0.40):
+            // Closes 0.40 of BUY, keeps 0.60 BUY open, and opens new SELL 0.40
+            const closedVol: number = deal.volume;
+            const remainingOldVol: number = activePos.openVolume - closedVol;
+
+            const closingDealPart: MT5Deal = {
+              ...deal,
+              volume: closedVol,
+              profit: deal.profit,
+              commission: deal.commission ? deal.commission * 0.5 : 0,
+              swap: deal.swap || 0,
+              entry: 'out',
+              type: 'out',
+            };
+
+            // Finalize the closed 0.40 portion
+            closedPositions.push(finalizePos({
+              ticket: activePos.ticket,
+              position_id: activePos.position_id,
+              symbol: activePos.symbol,
+              side: activePos.side,
+              inDeals: activePos.inDeals.map(d => ({ ...d, volume: closedVol })),
+              outDeals: [closingDealPart],
+              openVolume: 0,
+            }, false));
+
+            // Record remaining 0.60 of the original position as open
+            openPositions.push(finalizePos({
+              ticket: activePos.ticket,
+              position_id: activePos.position_id,
+              symbol: activePos.symbol,
+              side: activePos.side,
+              inDeals: activePos.inDeals.map(d => ({ ...d, volume: remainingOldVol })),
+              outDeals: [],
+              openVolume: remainingOldVol,
+            }, true));
+
+            // Open new opposite position with unique identity
+            const newPosId = `${positionKey}_rev_${deal.deal_id || i}`;
+            const openingDealPart: MT5Deal = {
+              ...deal,
+              volume: deal.volume,
+              profit: 0,
+              commission: deal.commission ? deal.commission * 0.5 : 0,
+              swap: 0,
+              entry: 'in',
+              type: 'in',
+              side: deal.side,
+              position_id: newPosId,
+              ticket: `${deal.ticket || deal.deal_id || positionKey}_rev`,
+            };
+
+            activePos = {
+              ticket: openingDealPart.ticket!,
+              position_id: newPosId,
+              symbol: deal.symbol,
+              side: deal.side,
+              inDeals: [openingDealPart],
+              outDeals: [],
+              openVolume: deal.volume,
+            };
+          } else if (isEqual) {
+            // Equal volume (e.g. BUY 1.00, INOUT SELL 1.00):
+            // Closes existing position completely
+            const closedVol: number = activePos.openVolume;
+            const closingDealPart: MT5Deal = {
+              ...deal,
+              volume: closedVol,
+              profit: deal.profit,
+              commission: deal.commission || 0,
+              swap: deal.swap || 0,
+              entry: 'out',
+              type: 'out',
+            };
+            activePos.outDeals.push(closingDealPart);
+            activePos.openVolume = 0;
             closedPositions.push(finalizePos(activePos, false));
             activePos = null;
+          } else {
+            // Larger volume (e.g. BUY 1.00, INOUT SELL 1.50):
+            // Closes existing BUY 1.00 completely and opens new SELL 0.50
+            const closedVol: number = activePos.openVolume;
+            const remainingNewVol: number = deal.volume - closedVol;
+            const closeRatio: number = closedVol / deal.volume;
+            const openRatio: number = remainingNewVol / deal.volume;
+
+            // 1. Portion that closes current active position
+            const closingDealPart: MT5Deal = {
+              ...deal,
+              volume: closedVol,
+              profit: deal.profit,
+              commission: (deal.commission || 0) * closeRatio,
+              swap: deal.swap || 0,
+              entry: 'out',
+              type: 'out',
+            };
+            activePos.outDeals.push(closingDealPart);
+            activePos.openVolume = 0;
+            closedPositions.push(finalizePos(activePos, false));
+
+            // 2. Remaining portion opens new opposite position with unique identity
+            const newPosId = `${positionKey}_rev_${deal.deal_id || i}`;
+            const openingDealPart: MT5Deal = {
+              ...deal,
+              volume: remainingNewVol,
+              profit: 0,
+              commission: (deal.commission || 0) * openRatio,
+              swap: 0,
+              entry: 'in',
+              type: 'in',
+              side: deal.side,
+              position_id: newPosId,
+              ticket: `${deal.ticket || deal.deal_id || positionKey}_rev`,
+            };
+
+            activePos = {
+              ticket: openingDealPart.ticket!,
+              position_id: newPosId,
+              symbol: deal.symbol,
+              side: deal.side,
+              inDeals: [openingDealPart],
+              outDeals: [],
+              openVolume: remainingNewVol,
+            };
           }
-        } else {
-          // REVERSAL: deal volume exceeds currently open volume
-          const closedVol: number = activePos.openVolume;
-          const remainingNewVol: number = deal.volume - closedVol;
-          const closeRatio: number = closedVol / deal.volume;
-          const openRatio: number = remainingNewVol / deal.volume;
-
-          // 1. Portion that closes the current active position
-          const closingDealPart: MT5Deal = {
-            ...deal,
-            volume: closedVol,
-            profit: deal.profit,
-            commission: (deal.commission || 0) * closeRatio,
-            swap: deal.swap || 0,
-            entry: 'out',
-            type: 'out',
-          };
-          activePos.outDeals.push(closingDealPart);
-          activePos.openVolume = 0;
-          closedPositions.push(finalizePos(activePos, false));
-
-          // 2. Remaining portion opens a new opposite position
-          const openingDealPart: MT5Deal = {
-            ...deal,
-            volume: remainingNewVol,
-            profit: 0,
-            commission: (deal.commission || 0) * openRatio,
-            swap: 0,
-            entry: 'in',
-            type: 'in',
-            side: deal.side,
-          };
-
-          activePos = {
-            ticket: deal.ticket || deal.position_id || positionKey,
-            position_id: deal.position_id || positionKey,
-            symbol: deal.symbol,
-            side: deal.side,
-            inDeals: [openingDealPart],
-            outDeals: [],
-            openVolume: remainingNewVol,
-          };
         }
       }
     }
@@ -370,9 +496,14 @@ export function aggregateMT5Positions(deals: MT5Deal[]): AggregatedPosition[] {
 export function positionToNormalizedTrade(position: AggregatedPosition): NormalizedTrade {
   const hasOutBy = position.deals.some(d => d.entry === 'out_by');
   const rawComment = position.deals.find(d => d.comment)?.comment || null;
-  const comment = hasOutBy
-    ? (rawComment ? (rawComment.includes('Close By') || rawComment.includes('close by') ? rawComment : `[Close By] ${rawComment}`) : '[Close By]')
-    : rawComment;
+  let comment = rawComment;
+  if (hasOutBy) {
+    if (position.close_by_position_id && (!rawComment || !rawComment.toLowerCase().includes('close by'))) {
+      comment = rawComment ? `[Close By #${position.close_by_position_id}] ${rawComment}` : `[Close By #${position.close_by_position_id}]`;
+    } else if (!rawComment) {
+      comment = '[Close By]';
+    }
+  }
 
   return {
     ticket: position.ticket,

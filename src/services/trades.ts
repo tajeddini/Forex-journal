@@ -74,6 +74,35 @@ export async function createTradesBatch(trades: TradeInsert[]): Promise<Trade[]>
     return created;
   }
 
+  // Attempt transactional RPC import if batch metadata is consistent
+  const batchId = trades[0].import_batch_id;
+  const userId = trades[0].user_id;
+  const accountId = trades[0].account_id;
+  const sameBatch = batchId && trades.every(t => t.import_batch_id === batchId && t.user_id === userId && t.account_id === accountId);
+
+  if (sameBatch) {
+    const { error: rpcError } = await supabase.rpc('import_trades_transactional', {
+      p_batch_id: batchId,
+      p_user_id: userId,
+      p_account_id: accountId,
+      p_trades: trades,
+    });
+
+    if (!rpcError) {
+      const { data: inserted, error: fetchErr } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('import_batch_id', batchId)
+        .eq('user_id', userId);
+
+      if (!fetchErr && inserted) {
+        return inserted;
+      }
+    } else if (!rpcError.message.includes('function') && !rpcError.message.includes('not found')) {
+      throw new Error(`خطا در ذخیره تراکنشی معاملات: ${rpcError.message}`);
+    }
+  }
+
   const { data, error } = await supabase
     .from('trades')
     .insert(trades)

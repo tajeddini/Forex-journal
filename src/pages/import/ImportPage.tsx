@@ -173,7 +173,7 @@ export default function ImportPage() {
 
     try {
       const existingTrades = await getTrades(user.id, state.account.id);
-      const duplicatesMap = findDuplicates(state.normalizedTrades, existingTrades);
+      const duplicatesMap = findDuplicates(state.normalizedTrades, existingTrades, state.account.id);
       setState(prev => ({ ...prev, duplicates: duplicatesMap, duplicateCheckError: null }));
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'خطا در بررسی معاملات تکراری';
