@@ -94,6 +94,7 @@ export async function parseMT5PositionReport(file: File): Promise<ParsedMT5Repor
 
   const headers = [
     'entry_datetime',
+    'ticket',
     'position_id',
     'symbol',
     'side',
@@ -130,6 +131,7 @@ export async function parseMT5PositionReport(file: File): Promise<ParsedMT5Repor
 
     rows.push({
       entry_datetime: valueAt(entryTimeIndex),
+      ticket: position,
       position_id: position,
       symbol,
       side: valueAt(typeIndex),
