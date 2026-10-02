@@ -9,7 +9,6 @@ import { getDashboardAnalytics, fetchAccounts } from '../../services/analytics';
 import { calculateCoreMetrics } from '../../services/analytics/metrics';
 import { calculateEquityCurve, calculateDrawdown } from '../../services/analytics/equity';
 import { aggregateByTime, calculatePerformanceBreakdown } from '../../services/analytics/aggregation';
-import type { ClassifiedTrade } from '../../services/analytics/types';
 import type { DashboardWidget, DashboardLayout } from '../../types/database';
 import { DEFAULT_DASHBOARD_WIDGETS, getDefaultDashboardLayout, updateDashboardLayout } from '../../services/dashboard';
 import { Card, CardTitle, CardHeader } from '../../components/ui/Card';
@@ -50,7 +49,7 @@ export default function CustomDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<DashboardLayout | null>(null);
   const [widgets, setWidgets] = useState<DashboardWidget[]>(DEFAULT_DASHBOARD_WIDGETS);
-  const [trades, setTrades] = useState<ClassifiedTrade[]>([]);
+  const [dashboardAnalytics, setDashboardAnalytics] = useState<Awaited<ReturnType<typeof getDashboardAnalytics>> | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [accountCount, setAccountCount] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
