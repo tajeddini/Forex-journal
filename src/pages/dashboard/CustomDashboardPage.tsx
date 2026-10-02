@@ -217,7 +217,6 @@ export default function CustomDashboardPage() {
           dailyPnl={dailyPnl}
           symbolPerformance={symbolPerformance}
           drawdown={drawdown}
-          trades={trades}
           accountCount={accountCount}
         />
       )}
@@ -269,7 +268,7 @@ export default function CustomDashboardPage() {
 
 // --- Sortable Widget Component ---
 
-function SortableWidget({ widget, onRemove, metrics, equity, dailyPnl, symbolPerformance, drawdown, trades, accountCount }: {
+function SortableWidget({ widget, onRemove, metrics, equity, dailyPnl, symbolPerformance, drawdown, accountCount }: {
   widget: DashboardWidget;
   onRemove: () => void;
   metrics: any;
@@ -277,7 +276,6 @@ function SortableWidget({ widget, onRemove, metrics, equity, dailyPnl, symbolPer
   dailyPnl: any;
   symbolPerformance: any;
   drawdown: any;
-  trades: ClassifiedTrade[];
   accountCount: number;
 }) {
   const {
@@ -336,7 +334,7 @@ function SortableWidget({ widget, onRemove, metrics, equity, dailyPnl, symbolPer
 
 // --- Sortable Widgets Container ---
 
-function SortableWidgets({ widgets, onReorder, onRemove, metrics, equity, dailyPnl, symbolPerformance, drawdown, trades, accountCount }: {
+function SortableWidgets({ widgets, onReorder, onRemove, metrics, equity, dailyPnl, symbolPerformance, drawdown, accountCount }: {
   widgets: DashboardWidget[];
   onReorder: (newWidgets: DashboardWidget[]) => void;
   onRemove: (widgetId: string) => void;
@@ -345,7 +343,6 @@ function SortableWidgets({ widgets, onReorder, onRemove, metrics, equity, dailyP
   dailyPnl: any;
   symbolPerformance: any;
   drawdown: any;
-  trades: ClassifiedTrade[];
   accountCount: number;
 }) {
   const sensors = useSensors(
@@ -391,7 +388,6 @@ function SortableWidgets({ widgets, onReorder, onRemove, metrics, equity, dailyP
               dailyPnl={dailyPnl}
               symbolPerformance={symbolPerformance}
               drawdown={drawdown}
-              trades={trades}
               accountCount={accountCount}
             />
           ))}
