@@ -7,6 +7,7 @@ const envPublishableKey =
   '';
 
 export const isSupabaseConfigured = Boolean(
+  import.meta.env.MODE !== 'test' &&
   envUrl &&
   envPublishableKey &&
   !envUrl.includes('placeholder') &&
