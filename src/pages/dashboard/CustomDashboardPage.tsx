@@ -407,11 +407,10 @@ interface WidgetRendererProps {
   dailyPnl: any;
   symbolPerformance: any;
   drawdown: any;
-  trades: ClassifiedTrade[];
   accountCount: number;
 }
 
-function WidgetRenderer({ widget, onRemove, metrics, equity, dailyPnl, symbolPerformance, drawdown, trades, accountCount }: WidgetRendererProps) {
+function WidgetRenderer({ widget, onRemove, metrics, equity, dailyPnl, symbolPerformance, drawdown, accountCount }: WidgetRendererProps) {
   const sizeClass = widget.size === 'large' ? 'md:col-span-2 lg:col-span-4' :
                     widget.size === 'medium' ? 'md:col-span-2' : 'md:col-span-1';
 

@@ -92,7 +92,7 @@ export async function fetchDashboardTrades(
     throw new Error(`خطا در دریافت معاملات داشبورد: ${error.message}`);
   }
 
-  return data || [];
+  return (data || []) as unknown as Trade[];
 }
 
 /**
