@@ -54,7 +54,7 @@ export default function CalendarPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user, selectedAccountId, currentMonth]);
+  }, [user, selectedAccountId, currentMonth, userTimezone]);
 
   // Get calendar grid
   const calendarGrid = useMemo(() => {

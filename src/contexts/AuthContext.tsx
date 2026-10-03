@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { getProfile, createProfile } from '../services/profiles';
 import type { Profile } from '../types/database';
 import { getAuthErrorMessage } from '../utils/auth-errors';
+import { useGuest } from './GuestContext';
 
 interface AuthContextType {
   user: User | null;
@@ -39,9 +40,14 @@ const DEMO_PROFILE: Profile = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(!isSupabaseConfigured ? DEMO_USER : null);
+  const { isGuest } = useGuest();
+  const [user, setUser] = useState<User | null>(
+    !isSupabaseConfigured || isGuest ? DEMO_USER : null
+  );
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(!isSupabaseConfigured ? DEMO_PROFILE : null);
+  const [profile, setProfile] = useState<Profile | null>(
+    !isSupabaseConfigured || isGuest ? DEMO_PROFILE : null
+  );
   const [loading, setLoading] = useState(isSupabaseConfigured);
 
   // Load profile for the current user
@@ -62,6 +68,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Sync demo state when guest mode toggles without an active Supabase session
+  useEffect(() => {
+    if (!session?.user) {
+      if (isGuest || !isSupabaseConfigured) {
+        setUser(DEMO_USER);
+        setProfile(DEMO_PROFILE);
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
+    }
+  }, [isGuest, session]);
+
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setLoading(false);
@@ -71,12 +90,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
       if (session?.user) {
+        setUser(session.user);
         loadProfile(session.user.id, session.user.user_metadata?.display_name || session.user.email?.split('@')[0]);
+      } else if (isGuest || !isSupabaseConfigured) {
+        setUser(DEMO_USER);
+        setProfile(DEMO_PROFILE);
+      } else {
+        setUser(null);
+        setProfile(null);
       }
       setLoading(false);
     }).catch(() => {
+      if (isGuest || !isSupabaseConfigured) {
+        setUser(DEMO_USER);
+        setProfile(DEMO_PROFILE);
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
       setLoading(false);
     });
 
@@ -84,10 +116,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
-        setUser(session?.user ?? null);
         if (session?.user) {
+          setUser(session.user);
           loadProfile(session.user.id, session.user.user_metadata?.display_name || session.user.email?.split('@')[0]);
+        } else if (isGuest || !isSupabaseConfigured) {
+          setUser(DEMO_USER);
+          setProfile(DEMO_PROFILE);
         } else {
+          setUser(null);
           setProfile(null);
         }
         setLoading(false);
@@ -95,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, [loadProfile]);
+  }, [loadProfile, isGuest]);
 
   const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {

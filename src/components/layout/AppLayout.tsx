@@ -18,7 +18,7 @@ const navItems = [
 
 export default function AppLayout() {
   const { user, profile, signOut } = useAuth();
-  const { exitGuestMode } = useGuest();
+  const { isGuest, exitGuestMode } = useGuest();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,9 +90,16 @@ export default function AppLayout() {
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                {profile?.display_name || 'کاربر'}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {profile?.display_name || 'کاربر'}
+                </p>
+                {isGuest && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                    مهمان
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {user?.email}
               </p>
@@ -110,7 +117,7 @@ export default function AppLayout() {
               onClick={handleSignOut}
               className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
-              خروج
+              {isGuest ? 'خروج' : 'خروج'}
             </button>
           </div>
         </div>
@@ -118,6 +125,22 @@ export default function AppLayout() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Guest Mode Banner */}
+        {isGuest && (
+          <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/50 px-4 py-2 flex items-center justify-between text-xs text-amber-800 dark:text-amber-200">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+              <span>شما در حالت دمو (مهمان) هستید و داده‌های نمونه را مشاهده می‌کنید.</span>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100 transition-colors"
+            >
+              ورود با اکانت اصلی
+            </button>
+          </div>
+        )}
+
         {/* Top Bar */}
         <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-4 lg:hidden">
           <button

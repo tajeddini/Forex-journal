@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
+import { isSupabaseConfigured } from '../../services/supabase';
 
 export default function SettingsPage() {
   const settingsItems = [
@@ -102,11 +103,17 @@ export default function SettingsPage() {
       <Card className="border border-gray-200 dark:border-gray-700">
         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-2">وضعیت اتصال به پایگاه داده (Supabase)</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-          برنامه هم‌اکنون با ذخیره‌سازی ابری و دیتابیس درون‌حافظه‌ای پایدار (Local Storage & Mock Data) بدون نیاز به پیکربندی خارجی کار می‌کند. در صورت تمایل می‌توانید کلیدهای پروژه اختصاصی Supabase خود را متصل نمایید.
+          {isSupabaseConfigured
+            ? 'اتصال به دیتابیس ابری Supabase فعال است. داده‌های معاملات، ژورنال‌ها، تگ‌ها و تصاویر در فضای ابری همگام‌سازی می‌شوند.'
+            : 'برنامه هم‌اکنون با ذخیره‌سازی محلی و دیتابیس درون‌حافظه‌ای پایدار (Local Storage & Mock Data) کار می‌کند.'}
         </p>
         <div className="flex items-center gap-2 text-xs">
-          <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          <span className="text-gray-700 dark:text-gray-300 font-medium">پایگاه داده محلی و دمو آماده فعالیت است</span>
+          <span className={`inline-block w-2.5 h-2.5 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+          <span className="text-gray-700 dark:text-gray-300 font-medium">
+            {isSupabaseConfigured
+              ? 'پایگاه داده ابری Supabase متصل و فعال است'
+              : 'پایگاه داده محلی و دمو آماده فعالیت است'}
+          </span>
         </div>
       </Card>
     </div>
