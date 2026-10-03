@@ -162,16 +162,29 @@ export default function TradeDetailPage() {
         status,
       });
 
-      // Save tags
-      await setTradeTags(trade.id, selectedTags);
+      // Save tags and mistakes independently. A relationship failure must
+      // not make the primary journal save appear to have failed.
+      const [tagsResult, mistakesResult] = await Promise.allSettled([
+        setTradeTags(trade.id, selectedTags, user.id),
+        setTradeMistakes(trade.id, selectedMistakes, user.id),
+      ]);
 
-      // Save mistakes
-      await setTradeMistakes(trade.id, selectedMistakes);
-
-      toast.success('ژورنال با موفقیت ذخیره شد');
-      
-      // Refresh trade data
+      // Re-read the persisted record from Supabase after saving.
       await fetchTrade();
+
+      const relationshipErrors: string[] = [];
+      if (tagsResult.status === 'rejected') {
+        relationshipErrors.push(tagsResult.reason instanceof Error ? tagsResult.reason.message : 'خطا در ذخیره تگ‌ها');
+      }
+      if (mistakesResult.status === 'rejected') {
+        relationshipErrors.push(mistakesResult.reason instanceof Error ? mistakesResult.reason.message : 'خطا در ذخیره اشتباهات');
+      }
+
+      if (relationshipErrors.length > 0) {
+        toast.error(`ژورنال ذخیره شد، اما بخشی از اطلاعات جانبی ذخیره نشد: ${relationshipErrors.join(' | ')}`);
+      } else {
+        toast.success('ژورنال و اطلاعات مرتبط با موفقیت ذخیره شدند');
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'خطا در ذخیره ژورنال');
     } finally {
