@@ -40,47 +40,7 @@ export async function getTradeJournal(tradeId: string, userId: string): Promise<
 
 export async function saveTradeJournal(input: TradeJournalInsert): Promise<TradeJournal> {
   if (!isSupabaseConfigured || input.user_id === 'guest-demo-user') {
-    const list = await MockStorage.getTradeJournals();
-    const existing = list.find(j => j.trade_id === input.trade_id);
-    if (existing) {
-      return { ...existing, ...input, updated_at: new Date().toISOString() };
-    }
-    const defaults: Omit<TradeJournal, 'id' | 'created_at' | 'updated_at' | 'trade_id' | 'user_id'> = {
-      strategy_id: null,
-      setup_id: null,
-      market_context: null,
-      market_bias: null,
-      timeframe: null,
-      important_levels: null,
-      confluences: null,
-      entry_reason: null,
-      expected_scenario: null,
-      invalidating_condition: null,
-      planned_risk_amount: null,
-      planned_risk_percentage: null,
-      planned_rr: null,
-      confidence: null,
-      checklist: null,
-      emotion_before: null,
-      emotion_during: null,
-      emotion_after: null,
-      execution_quality: null,
-      rule_adherence: 'not_set',
-      rule_adherence_notes: null,
-      what_went_well: null,
-      what_went_wrong: null,
-      lesson_learned: null,
-      post_trade_notes: null,
-      status: 'not_started',
-    };
-    const newJournal: TradeJournal = {
-      ...defaults,
-      ...input,
-      id: `journal-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    return newJournal;
+    return MockStorage.saveTradeJournal(input);
   }
 
   // Verify trade ownership
@@ -95,12 +55,16 @@ export async function saveTradeJournal(input: TradeJournalInsert): Promise<Trade
     throw new Error('معامله مورد نظر یافت نشد یا متعلق به شما نیست');
   }
 
+  // Sanitize input payload
+  const sanitizedStrategyId = input.strategy_id ? input.strategy_id.trim() || null : null;
+  const sanitizedSetupId = input.setup_id ? input.setup_id.trim() || null : null;
+
   // Verify strategy ownership if supplied
-  if (input.strategy_id) {
+  if (sanitizedStrategyId) {
     const { data: strat } = await supabase
       .from('strategies')
       .select('id')
-      .eq('id', input.strategy_id)
+      .eq('id', sanitizedStrategyId)
       .eq('user_id', input.user_id)
       .maybeSingle();
     if (!strat) {
@@ -109,11 +73,11 @@ export async function saveTradeJournal(input: TradeJournalInsert): Promise<Trade
   }
 
   // Verify setup ownership if supplied
-  if (input.setup_id) {
+  if (sanitizedSetupId) {
     const { data: st } = await supabase
       .from('setups')
       .select('id')
-      .eq('id', input.setup_id)
+      .eq('id', sanitizedSetupId)
       .eq('user_id', input.user_id)
       .maybeSingle();
     if (!st) {
@@ -121,9 +85,23 @@ export async function saveTradeJournal(input: TradeJournalInsert): Promise<Trade
     }
   }
 
+  const payload: TradeJournalInsert = {
+    ...input,
+    strategy_id: sanitizedStrategyId,
+    setup_id: sanitizedSetupId,
+    planned_risk_amount: typeof input.planned_risk_amount === 'number' && !isNaN(input.planned_risk_amount) ? input.planned_risk_amount : null,
+    planned_risk_percentage: typeof input.planned_risk_percentage === 'number' && !isNaN(input.planned_risk_percentage) ? input.planned_risk_percentage : null,
+    planned_rr: typeof input.planned_rr === 'number' && !isNaN(input.planned_rr) ? input.planned_rr : null,
+    confidence: typeof input.confidence === 'number' && !isNaN(input.confidence) ? Math.min(10, Math.max(1, Math.round(input.confidence))) : null,
+    execution_quality: typeof input.execution_quality === 'number' && !isNaN(input.execution_quality) ? Math.min(10, Math.max(1, Math.round(input.execution_quality))) : null,
+    rule_adherence: input.rule_adherence || 'not_set',
+    status: input.status || 'not_started',
+    checklist: input.checklist || {},
+  };
+
   const { data, error } = await supabase
     .from('trade_journals')
-    .upsert(input, { onConflict: 'trade_id' })
+    .upsert(payload, { onConflict: 'trade_id' })
     .select()
     .single();
 
@@ -326,12 +304,14 @@ export async function getTradesWithJournal(
 
   return (data || []).map((trade: any) => ({
     ...trade,
-    journal: trade.journal?.[0] || null,
-    tags: (trade.tags || []).map((t: any) => t.tag),
+    journal: Array.isArray(trade.journal)
+      ? (trade.journal[0] || null)
+      : (trade.journal || null),
+    tags: (trade.tags || []).map((t: any) => t.tag).filter(Boolean),
     mistakes: (trade.mistakes || []).map((m: any) => ({
       mistake: m.mistake,
       notes: m.notes,
-    })),
+    })).filter((m: any) => Boolean(m.mistake)),
   }));
 }
 
@@ -370,12 +350,14 @@ export async function getTradeWithJournal(tradeId: string, userId: string): Prom
 
   return {
     ...data,
-    journal: data.journal?.[0] || null,
-    tags: (data.tags || []).map((t: any) => t.tag),
+    journal: Array.isArray(data.journal)
+      ? (data.journal[0] || null)
+      : (data.journal || null),
+    tags: (data.tags || []).map((t: any) => t.tag).filter(Boolean),
     mistakes: (data.mistakes || []).map((m: any) => ({
       mistake: m.mistake,
       notes: m.notes,
-    })),
+    })).filter((m: any) => Boolean(m.mistake)),
   };
 }
 

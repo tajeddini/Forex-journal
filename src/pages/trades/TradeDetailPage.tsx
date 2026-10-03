@@ -162,6 +162,14 @@ export default function TradeDetailPage() {
         status,
       });
 
+      // Synchronize in-memory trade state immediately with updated journal
+      setTrade(prev => (prev ? { ...prev, journal: updatedJournal } : prev));
+      setJournalData(prev => ({
+        ...prev,
+        ...updatedJournal,
+        status: updatedJournal.status,
+      }));
+
       // Save tags and mistakes independently. A relationship failure must
       // not make the primary journal save appear to have failed.
       const [tagsResult, mistakesResult] = await Promise.allSettled([
@@ -285,6 +293,99 @@ export default function TradeDetailPage() {
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-sm text-gray-500 dark:text-gray-400">کامنت بروکر</p>
                 <p className="mt-1 text-gray-900 dark:text-gray-100">{trade.comment}</p>
+              </div>
+            )}
+          </Card>
+
+          {/* Journal Summary */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700/60">
+              <div className="flex items-center gap-2">
+                <CardTitle>خلاصه ژورنال و تحلیل معامله</CardTitle>
+                <Badge variant={
+                  (trade.journal?.status || journalData.status) === 'completed'
+                    ? 'success'
+                    : (trade.journal?.status || journalData.status) === 'in_progress'
+                    ? 'warning'
+                    : 'default'
+                }>
+                  {getJournalStatusLabel(trade.journal?.status || journalData.status || 'not_started')}
+                </Badge>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setActiveTab('pretrade')}
+              >
+                ویرایش جزئیات ژورنال
+              </Button>
+            </CardHeader>
+
+            {Boolean(
+              (journalData.entry_reason || trade.journal?.entry_reason) ||
+              (journalData.emotion_during || trade.journal?.emotion_during) ||
+              (journalData.lesson_learned || trade.journal?.lesson_learned) ||
+              (journalData.strategy_id || trade.journal?.strategy_id) ||
+              (journalData.setup_id || trade.journal?.setup_id) ||
+              ((journalData.rule_adherence || trade.journal?.rule_adherence) && (journalData.rule_adherence || trade.journal?.rule_adherence) !== 'not_set')
+            ) ? (
+              <div className="space-y-4 pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700/60">
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 block">استراتژی:</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {strategies.find(s => s.id === (journalData.strategy_id || trade.journal?.strategy_id))?.name || '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 block">ستاپ:</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {setups.find(s => s.id === (journalData.setup_id || trade.journal?.setup_id))?.name || '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 block">رعایت قوانین:</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {getRuleAdherenceLabel(journalData.rule_adherence || trade.journal?.rule_adherence || 'not_set')}
+                    </span>
+                  </div>
+                </div>
+
+                {(journalData.entry_reason || trade.journal?.entry_reason) && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">دلیل ورود به معامله:</p>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-100/60 dark:border-blue-900/30 whitespace-pre-wrap leading-relaxed">
+                      {journalData.entry_reason || trade.journal?.entry_reason}
+                    </p>
+                  </div>
+                )}
+
+                {(journalData.emotion_during || trade.journal?.emotion_during) && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">احساسات و وضعیت روحی حین معامله:</p>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 bg-purple-50/50 dark:bg-purple-950/20 p-3 rounded-lg border border-purple-100/60 dark:border-purple-900/30 whitespace-pre-wrap leading-relaxed">
+                      {journalData.emotion_during || trade.journal?.emotion_during}
+                    </p>
+                  </div>
+                )}
+
+                {(journalData.lesson_learned || trade.journal?.lesson_learned) && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">درس آموخته اصلی:</p>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-lg border border-emerald-100/60 dark:border-emerald-900/30 whitespace-pre-wrap leading-relaxed">
+                      {journalData.lesson_learned || trade.journal?.lesson_learned}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                  هنوز دلیل ورود یا تحلیلی برای این معامله ثبت نشده است.
+                </p>
+                <Button size="sm" onClick={() => setActiveTab('pretrade')}>
+                  تکمیل ژورنال این معامله
+                </Button>
               </div>
             )}
           </Card>

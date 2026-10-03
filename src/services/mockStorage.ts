@@ -33,6 +33,7 @@ import type {
   ImportBatch,
   ImportBatchInsert,
   ImportBatchUpdate,
+  TradeJournalInsert,
 } from '../types/database';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -229,6 +230,55 @@ export const MockStorage = {
 
   // Trade Journals
   getTradeJournals: async (): Promise<TradeJournal[]> => [...tradeJournals],
+  saveTradeJournal: async (input: TradeJournalInsert): Promise<TradeJournal> => {
+    const existingIndex = tradeJournals.findIndex((j) => j.trade_id === input.trade_id);
+    let saved: TradeJournal;
+    if (existingIndex >= 0) {
+      saved = {
+        ...tradeJournals[existingIndex],
+        ...input,
+        updated_at: new Date().toISOString(),
+      };
+      tradeJournals[existingIndex] = saved;
+    } else {
+      saved = {
+        id: `journal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        trade_id: input.trade_id,
+        user_id: input.user_id || 'guest-demo-user',
+        strategy_id: input.strategy_id || null,
+        setup_id: input.setup_id || null,
+        market_context: input.market_context || null,
+        market_bias: input.market_bias || null,
+        timeframe: input.timeframe || null,
+        important_levels: input.important_levels || null,
+        confluences: input.confluences || null,
+        entry_reason: input.entry_reason || null,
+        expected_scenario: input.expected_scenario || null,
+        invalidating_condition: input.invalidating_condition || null,
+        planned_risk_amount: input.planned_risk_amount ?? null,
+        planned_risk_percentage: input.planned_risk_percentage ?? null,
+        planned_rr: input.planned_rr ?? null,
+        confidence: input.confidence ?? null,
+        checklist: input.checklist || null,
+        emotion_before: input.emotion_before || null,
+        emotion_during: input.emotion_during || null,
+        emotion_after: input.emotion_after || null,
+        execution_quality: input.execution_quality ?? null,
+        rule_adherence: input.rule_adherence || 'not_set',
+        rule_adherence_notes: input.rule_adherence_notes || null,
+        what_went_well: input.what_went_well || null,
+        what_went_wrong: input.what_went_wrong || null,
+        lesson_learned: input.lesson_learned || null,
+        post_trade_notes: input.post_trade_notes || null,
+        status: input.status || 'not_started',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      tradeJournals.push(saved);
+    }
+    saveToStorage('trade_journals', tradeJournals);
+    return saved;
+  },
 
   // Trade Images
   getTradeImages: async (tradeId: string): Promise<TradeImage[]> => {
