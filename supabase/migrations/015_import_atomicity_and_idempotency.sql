@@ -19,13 +19,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_mt5_account_position_unique
   ON public.trades(account_id, position_id)
   WHERE position_id IS NOT NULL AND source = 'mt5';
 
--- 3. Transactional atomic import function
+-- Drop any legacy signature if previously declared with different parameter ordering
+DROP FUNCTION IF EXISTS public.import_trades_transactional(UUID, UUID, UUID, JSONB, TEXT);
+
+-- 3. Canonical transactional atomic import function
 CREATE OR REPLACE FUNCTION public.import_trades_transactional(
-  p_batch_id UUID,
-  p_user_id UUID,
   p_account_id UUID,
-  p_trades JSONB,
-  p_final_status TEXT DEFAULT 'completed'
+  p_batch_id UUID,
+  p_final_status TEXT DEFAULT 'completed',
+  p_trades JSONB DEFAULT '[]'::jsonb,
+  p_user_id UUID DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -37,10 +40,15 @@ DECLARE
   v_inserted_count INTEGER := 0;
   v_trade RECORD;
   v_batch_record RECORD;
+  v_source public.trade_source;
 BEGIN
-  -- 1. Security Check: Authenticated caller must match p_user_id
+  -- 1. Security Check: Authenticated caller
   v_caller_id := auth.uid();
-  IF v_caller_id IS NULL OR v_caller_id <> p_user_id THEN
+  IF v_caller_id IS NULL THEN
+    RAISE EXCEPTION 'دسترسی غیرمجاز: کاربر احراز هویت نشده است';
+  END IF;
+
+  IF p_user_id IS NULL OR v_caller_id <> p_user_id THEN
     RAISE EXCEPTION 'دسترسی غیرمجاز: شناسه کاربر معتبر نیست یا احراز هویت نشده است';
   END IF;
 
@@ -58,18 +66,25 @@ BEGIN
   FROM public.import_batches
   WHERE id = p_batch_id
     AND user_id = p_user_id
-    AND account_id = p_account_id;
+    AND account_id = p_account_id
+  FOR UPDATE;
 
   IF v_batch_record.id IS NULL THEN
     RAISE EXCEPTION 'دسته ورود معتبر نیست یا متعلق به این حساب نمی‌باشد';
   END IF;
 
-  IF v_batch_record.status <> 'processing' THEN
+  IF v_batch_record.status <> 'processing'::public.import_batch_status THEN
     RAISE EXCEPTION 'دسته ورود در وضعیت معتبر برای ثبت اطلاعات نیست (وضعیت فعلی: %)', v_batch_record.status;
   END IF;
 
+  PERFORM p_final_status::public.import_batch_status;
+
+  IF jsonb_typeof(COALESCE(p_trades, '[]'::jsonb)) <> 'array' THEN
+    RAISE EXCEPTION 'p_trades باید یک آرایه JSON باشد';
+  END IF;
+
   -- 4. Atomic Trade Inserts & Phase Validations within the same transaction
-  FOR v_trade IN SELECT * FROM pg_catalog.jsonb_to_recordset(p_trades) AS x(
+  FOR v_trade IN SELECT * FROM pg_catalog.jsonb_to_recordset(COALESCE(p_trades, '[]'::jsonb)) AS x(
     ticket TEXT,
     position_id TEXT,
     symbol TEXT,
@@ -85,14 +100,15 @@ BEGIN
     swap NUMERIC,
     profit NUMERIC,
     comment TEXT,
-    magic_number INTEGER,
+    magic_number BIGINT,
     source public.trade_source,
     source_file TEXT,
-    phase_id UUID
+    phase_id UUID,
+    duration_seconds BIGINT
   )
   LOOP
     -- Required field validation
-    IF v_trade.symbol IS NULL OR pg_catalog.trim(v_trade.symbol) = '' THEN
+    IF v_trade.symbol IS NULL OR pg_catalog.btrim(v_trade.symbol) = '' THEN
       RAISE EXCEPTION 'نماد معامله نمی‌تواند خالی باشد';
     END IF;
 
@@ -108,6 +124,18 @@ BEGIN
       RAISE EXCEPTION 'زمان ورود معامله الزامی است';
     END IF;
 
+    IF v_trade.entry_price IS NULL THEN
+      RAISE EXCEPTION 'قیمت ورود معامله الزامی است';
+    END IF;
+
+    IF v_trade.exit_datetime IS NULL THEN
+      RAISE EXCEPTION 'زمان خروج معامله الزامی است';
+    END IF;
+
+    IF v_trade.exit_price IS NULL THEN
+      RAISE EXCEPTION 'قیمت خروج معامله الزامی است';
+    END IF;
+
     -- Phase Ownership Validation: Phase must belong to the exact account
     IF v_trade.phase_id IS NOT NULL THEN
       IF NOT EXISTS (
@@ -118,6 +146,8 @@ BEGIN
         RAISE EXCEPTION 'فاز معاملاتی انتخاب شده (%) متعلق به حساب معاملاتی مورد نظر نیست', v_trade.phase_id;
       END IF;
     END IF;
+
+    v_source := COALESCE(v_trade.source, 'mt5'::public.trade_source);
 
     INSERT INTO public.trades (
       user_id,
@@ -141,7 +171,8 @@ BEGIN
       comment,
       magic_number,
       source,
-      source_file
+      source_file,
+      duration_seconds
     ) VALUES (
       p_user_id,
       p_account_id,
@@ -149,7 +180,7 @@ BEGIN
       p_batch_id,
       v_trade.ticket,
       v_trade.position_id,
-      pg_catalog.trim(v_trade.symbol),
+      pg_catalog.btrim(v_trade.symbol),
       v_trade.side,
       v_trade.volume,
       v_trade.entry_datetime,
@@ -163,11 +194,15 @@ BEGIN
       COALESCE(v_trade.profit, 0),
       v_trade.comment,
       v_trade.magic_number,
-      COALESCE(v_trade.source, 'mt5'),
-      v_trade.source_file
-    );
+      v_source,
+      v_trade.source_file,
+      v_trade.duration_seconds
+    )
+    ON CONFLICT DO NOTHING;
 
-    v_inserted_count := v_inserted_count + 1;
+    IF FOUND THEN
+      v_inserted_count := v_inserted_count + 1;
+    END IF;
   END LOOP;
 
   -- 5. Complete the batch in the exact same transaction
@@ -175,8 +210,15 @@ BEGIN
   SET
     imported_rows = v_inserted_count,
     status = p_final_status::public.import_batch_status,
-    completed_at = pg_catalog.now()
-  WHERE id = p_batch_id;
+    completed_at = pg_catalog.now(),
+    error_message = NULL
+  WHERE id = p_batch_id
+    AND user_id = p_user_id
+    AND account_id = p_account_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'دسته ورود هنگام تکمیل پیدا نشد';
+  END IF;
 
   RETURN pg_catalog.jsonb_build_object(
     'success', true,
@@ -188,11 +230,9 @@ END;
 $$;
 
 -- 4. Strict Permission Hardening: Revoke execution from PUBLIC, grant only to authenticated and service_role
-REVOKE ALL ON FUNCTION public.import_trades_transactional(UUID, UUID, UUID, JSONB, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.import_trades_transactional(UUID, UUID, UUID, JSONB, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.import_trades_transactional(UUID, UUID, UUID, JSONB, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.import_trades_transactional(UUID, UUID, TEXT, JSONB, UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.import_trades_transactional(UUID, UUID, TEXT, JSONB, UUID) TO authenticated, service_role;
 
 -- 5. Harden screenshot helper function execution
-REVOKE ALL ON FUNCTION public.check_trade_screenshot_ownership(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.check_trade_screenshot_ownership(TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.check_trade_screenshot_ownership(TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.check_trade_screenshot_ownership(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.check_trade_screenshot_ownership(TEXT) TO authenticated, service_role;

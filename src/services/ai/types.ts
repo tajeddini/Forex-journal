@@ -45,6 +45,23 @@ export interface AIResponse<T> {
   };
   model?: string;
   latency?: number;
+  providerType?: AIProviderType;
+  isMock?: boolean;
+}
+
+export type AIProviderStatus =
+  | 'ready'
+  | 'mock'
+  | 'not_configured'
+  | 'unavailable'
+  | 'config_error'
+  | 'execution_error';
+
+export interface AIProviderState {
+  status: AIProviderStatus;
+  providerType: AIProviderType | null;
+  isMock: boolean;
+  message?: string;
 }
 
 export interface AICapabilities {
@@ -218,6 +235,9 @@ export class AIError extends Error {
 }
 
 export type AIErrorCode = 
+  | 'AI_PROVIDER_NOT_CONFIGURED'
+  | 'PROVIDER_CONFIG_ERROR'
+  | 'PROVIDER_EXECUTION_ERROR'
   | 'PROVIDER_UNAVAILABLE'
   | 'API_KEY_MISSING'
   | 'RATE_LIMIT'

@@ -42,6 +42,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_mt5_account_position_unique
 --   p_user_id
 -- ------------------------------------------------------------
 
+DROP FUNCTION IF EXISTS public.import_trades_transactional(UUID, UUID, UUID, JSONB, TEXT);
+
 CREATE OR REPLACE FUNCTION public.import_trades_transactional(
   p_account_id UUID,
   p_batch_id UUID,

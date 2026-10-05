@@ -30,6 +30,8 @@ export class MockAIProvider implements AIProvider {
       },
       model: 'mock-model-v1',
       latency: this.responseDelay,
+      providerType: 'mock',
+      isMock: true,
     };
   }
 
@@ -52,6 +54,8 @@ export class MockAIProvider implements AIProvider {
       },
       model: 'mock-model-v1',
       latency: this.responseDelay,
+      providerType: 'mock',
+      isMock: true,
     };
   }
 
