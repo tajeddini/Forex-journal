@@ -60,6 +60,24 @@ export default function AppLayout() {
           <span className="font-bold text-gray-900 dark:text-gray-100">ژورنال معاملاتی</span>
         </div>
 
+        {/* Quick Trade Entry Button */}
+        <div className="px-3 pt-3">
+          <NavLink
+            to="/app/trades/new"
+            onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl font-medium text-sm transition-all shadow-sm ${
+                isActive
+                  ? 'bg-blue-700 text-white ring-2 ring-blue-500'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`
+            }
+          >
+            <span className="text-base">✍️</span>
+            <span>ثبت معامله جدید</span>
+          </NavLink>
+        </div>
+
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => (
@@ -142,16 +160,25 @@ export default function AppLayout() {
         )}
 
         {/* Top Bar */}
-        <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-4 lg:hidden">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+        <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between lg:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">ژورنال معاملاتی</span>
+          </div>
+          <NavLink
+            to="/app/trades/new"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <span className="font-semibold text-gray-900 dark:text-gray-100">ژورنال معاملاتی</span>
+            <span>+</span>
+            <span>معامله جدید</span>
+          </NavLink>
         </header>
 
         {/* Page Content */}

@@ -40,6 +40,7 @@ const AccountsPage = lazyWithRetry(() => import('./pages/accounts/AccountsPage')
 const AccountDetailPage = lazyWithRetry(() => import('./pages/accounts/AccountDetailPage'));
 const ImportPage = lazyWithRetry(() => import('./pages/import/ImportPage'));
 const TradesPage = lazyWithRetry(() => import('./pages/trades/TradesPage'));
+const ManualTradePage = lazyWithRetry(() => import('./pages/trades/ManualTradePage'));
 const TradeDetailPage = lazyWithRetry(() => import('./pages/trades/TradeDetailPage'));
 const AnalyticsPage = lazyWithRetry(() => import('./pages/analytics/AnalyticsPage'));
 const WhatIfPage = lazyWithRetry(() => import('./pages/analytics/WhatIfPage'));
@@ -142,6 +143,14 @@ const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <TradesPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: 'trades/new',
+        element: (
+          <SuspenseWrapper>
+            <ManualTradePage />
           </SuspenseWrapper>
         ),
       },

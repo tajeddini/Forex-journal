@@ -3,6 +3,7 @@
 // ============================================================
 
 import { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getDashboardAnalytics, fetchAccounts } from '../../services/analytics';
@@ -162,7 +163,12 @@ export default function CustomDashboardPage() {
             داشبورد شخصی‌سازی‌شده شما
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <Link to="/app/trades/new">
+            <Button className="flex items-center gap-1.5 shadow-sm">
+              <span>+ ثبت معامله</span>
+            </Button>
+          </Link>
           <Button variant="secondary" onClick={() => setResetDialog(true)}>
             بازنشانی
           </Button>

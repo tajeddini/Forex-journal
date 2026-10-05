@@ -37,3 +37,11 @@ export function CardTitle({ children, className = '' }: { children: ReactNode; c
     </h3>
   );
 }
+
+export function CardDescription({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={`text-sm text-gray-500 dark:text-gray-400 ${className}`}>
+      {children}
+    </p>
+  );
+}

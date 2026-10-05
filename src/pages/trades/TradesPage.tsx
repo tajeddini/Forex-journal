@@ -12,15 +12,18 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { StatusNotice } from '../../components/ui/StatusNotice';
 import { formatDateTime, formatDuration, getJournalStatusLabel } from '../../utils/format';
 import { TRADE_SIDES } from '../../types/database';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ManualTradeModal } from '../../components/trades/ManualTradeModal';
 
 export default function TradesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [trades, setTrades] = useState<TradeWithJournal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const limit = 50;
 
   // Filters
@@ -90,16 +93,27 @@ export default function TradesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">معاملات</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {totalCount} معامله ثبت شده
           </p>
         </div>
-        <Link to="/app/import">
-          <Button>ورود معاملات جدید</Button>
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <Button
+            onClick={() => setIsManualModalOpen(true)}
+            className="flex items-center gap-1.5 shadow-sm"
+          >
+            <span>+ ثبت معامله دستی</span>
+          </Button>
+          <Link to="/app/import">
+            <Button variant="outline" className="flex items-center gap-1.5">
+              <span>ورود از اکسل</span>
+              <span>📊</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -300,11 +314,18 @@ export default function TradesPage() {
             </svg>
           }
           title="هنوز معامله‌ای ثبت نشده"
-          description="معاملات خود را از MT4/MT5 وارد کنید یا به صورت دستی ثبت کنید."
+          description="معاملات خود را به صورت دستی ثبت کنید یا با فایل اکسل متاتریدر (MT4/MT5) وارد نمایید."
           action={
-            <Link to="/app/import">
-              <Button>ورود معاملات</Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button onClick={() => setIsManualModalOpen(true)}>
+                ثبت اولین معامله دستی
+              </Button>
+              <Link to="/app/import">
+                <Button variant="outline">
+                  ورود فایل اکسل MT4/MT5
+                </Button>
+              </Link>
+            </div>
           }
         />
       ) : (
@@ -313,6 +334,19 @@ export default function TradesPage() {
           description="هیچ معامله‌ای با فیلترهای انتخاب‌شده یافت نشد."
         />
       )}
+
+      {/* Manual Trade Modal */}
+      <ManualTradeModal
+        isOpen={isManualModalOpen}
+        onClose={() => setIsManualModalOpen(false)}
+        onTradeCreated={(trade, shouldOpenJournal) => {
+          if (shouldOpenJournal) {
+            navigate(`/app/trades/${trade.id}?tab=pretrade`);
+          } else {
+            fetchTrades();
+          }
+        }}
+      />
     </div>
   );
 }

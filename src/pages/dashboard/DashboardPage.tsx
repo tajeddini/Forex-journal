@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGuest } from '../../contexts/GuestContext';
 import { useGuestData } from '../../hooks/useGuestData';
@@ -85,10 +86,10 @@ export default function DashboardPage() {
       <Card>
         <CardTitle>دسترسی سریع</CardTitle>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-          <QuickAction label="ثبت معامله" emoji="📝" />
-          <QuickAction label="ورود MT4/MT5" emoji="📥" />
-          <QuickAction label="افزودن حساب" emoji="💼" />
-          <QuickAction label="بازبینی روزانه" emoji="📋" />
+          <QuickAction label="ثبت معامله دستی" emoji="✍️" to="/app/trades/new" />
+          <QuickAction label="ورود فایل MT4/MT5" emoji="📥" to="/app/import" />
+          <QuickAction label="مدیریت حساب‌ها" emoji="💼" to="/app/accounts" />
+          <QuickAction label="بازبینی روزانه" emoji="📋" to="/app/reviews" />
         </div>
       </Card>
     </div>
@@ -117,11 +118,14 @@ function StatCard({ title, value, subtitle, color }: {
   );
 }
 
-function QuickAction({ label, emoji }: { label: string; emoji: string }) {
+function QuickAction({ label, emoji, to }: { label: string; emoji: string; to: string }) {
   return (
-    <button className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+    <Link
+      to={to}
+      className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+    >
       <span className="text-2xl">{emoji}</span>
-      <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
-    </button>
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+    </Link>
   );
 }
