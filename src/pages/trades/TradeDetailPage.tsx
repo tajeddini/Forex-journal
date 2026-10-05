@@ -15,12 +15,24 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
+import { MultiSelect } from '../../components/ui/MultiSelect';
 import { Loading } from '../../components/ui/Loading';
 import { StatusNotice } from '../../components/ui/StatusNotice';
 import { formatCurrency, formatDateTime, formatDuration, getJournalStatusLabel, getRuleAdherenceLabel } from '../../utils/format';
 import { VoiceInput } from '../../components/journal/VoiceInput';
 import { TradeImageUpload } from '../../components/trades/TradeImageUpload';
 import { TradeImageViewer } from '../../components/trades/TradeImageViewer';
+import {
+  TIMEFRAME_OPTIONS,
+  COMMON_TIMEFRAME_PRESETS,
+  MARKET_BIAS_OPTIONS,
+  CONFLUENCE_OPTIONS,
+  COMMON_CONFLUENCE_PRESETS,
+  MARKET_CONTEXT_OPTIONS,
+  EXIT_REASON_OPTIONS,
+  parseDelimitedString,
+  joinDelimitedString,
+} from '../../constants/tradingOptions';
 
 type Tab = 'info' | 'pretrade' | 'psychology' | 'review' | 'screenshots';
 
@@ -469,17 +481,25 @@ export default function TradeDetailPage() {
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="بایاس بازار"
-                  value={journalData.market_bias || ''}
-                  onChange={(e) => updateField('market_bias', e.target.value)}
-                  placeholder="صعودی / نزولی / رنج"
+                <MultiSelect
+                  label="تایم‌فریم‌های تحلیل و ورود (Timeframes)"
+                  placeholder="انتخاب یک یا چند تایم‌فریم..."
+                  options={TIMEFRAME_OPTIONS}
+                  presets={COMMON_TIMEFRAME_PRESETS}
+                  selectedValues={parseDelimitedString(journalData.timeframe)}
+                  onChange={(vals) => updateField('timeframe', joinDelimitedString(vals))}
+                  allowCustom={true}
+                  customPlaceholder="تایپ تایم‌فریم دلخواه (مثلاً M2)..."
+                  helperText="قابلیت انتخاب همزمان چند تایم‌فریم برای تحلیل مولتی‌تایم‌فریم"
                 />
-                <Input
-                  label="تایم‌فریم"
-                  value={journalData.timeframe || ''}
-                  onChange={(e) => updateField('timeframe', e.target.value)}
-                  placeholder="H1, H4, D1..."
+                <MultiSelect
+                  label="جهت‌گیری / بایاس بازار (Market Bias)"
+                  placeholder="انتخاب بایاس مارکت..."
+                  options={MARKET_BIAS_OPTIONS}
+                  selectedValues={parseDelimitedString(journalData.market_bias)}
+                  onChange={(vals) => updateField('market_bias', joinDelimitedString(vals))}
+                  allowCustom={true}
+                  customPlaceholder="تایپ یا انتخاب بایاس..."
                 />
               </div>
               <div>
@@ -492,14 +512,24 @@ export default function TradeDetailPage() {
                   placeholder="سطوح حمایت و مقاومت مهم..."
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  همگرایی‌ها (Confluences)
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  همگرایی‌ها و تاییده‌ها (Confluences)
                 </label>
+                <MultiSelect
+                  placeholder="انتخاب تاییده‌های ورود (BOS، FVG، اوردربلاک، فیبوناچی و...)..."
+                  options={CONFLUENCE_OPTIONS}
+                  presets={COMMON_CONFLUENCE_PRESETS}
+                  selectedValues={parseDelimitedString(journalData.confluences)}
+                  onChange={(vals) => updateField('confluences', joinDelimitedString(vals))}
+                  allowCustom={true}
+                  customPlaceholder="افزودن تاییدیه‌ دلخواه..."
+                  helperText="انتخاب آسان تاییده‌ها از لیست کشویی یا افزودن مورد دلخواه"
+                />
                 <VoiceTextarea
                   value={journalData.confluences || ''}
                   onChange={(v) => updateField('confluences', v)}
-                  placeholder="عوامل تأییدکننده ورود..."
+                  placeholder="یادداشت‌های بیشتر یا جزییات همگرایی‌ها..."
                 />
               </div>
             </div>
@@ -727,6 +757,30 @@ export default function TradeDetailPage() {
               <CardTitle>بازبینی بعد از معامله</CardTitle>
             </CardHeader>
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  دلایل و نحوه خروج از معامله (Exit Reasons)
+                </label>
+                <MultiSelect
+                  placeholder="انتخاب دلیل خروج (حد سود، حد ضرر، خروج سر‌به‌سر و...)..."
+                  options={EXIT_REASON_OPTIONS}
+                  selectedValues={parseDelimitedString(
+                    journalData.post_trade_notes?.startsWith('دلیل خروج:')
+                      ? journalData.post_trade_notes.split('\n')[0].replace('دلیل خروج:', '')
+                      : ''
+                  )}
+                  onChange={(vals) => {
+                    const existing = journalData.post_trade_notes || '';
+                    const exitLine = vals.length > 0 ? `دلیل خروج: ${joinDelimitedString(vals)}` : '';
+                    const otherNotes = existing.replace(/^دلیل خروج:.*(\n)?/m, '').trim();
+                    const combined = exitLine ? (otherNotes ? `${exitLine}\n${otherNotes}` : exitLine) : otherNotes;
+                    updateField('post_trade_notes', combined);
+                  }}
+                  allowCustom={true}
+                  customPlaceholder="تایپ دلیل خروج دلخواه..."
+                  helperText="ثبت علت بسته شدن پوزیشن جهت تحلیل اشتباهات و نقاط قوت"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   چه چیزی خوب پیش رفت؟

@@ -5,10 +5,23 @@ import { useToast } from '../../contexts/ToastContext';
 import { getAccounts } from '../../services/accounts';
 import { getPhases } from '../../services/accountPhases';
 import { createTrade } from '../../services/trades';
-import type { TradingAccount, AccountPhase, TradeSide, TradeInsert, Trade } from '../../types/database';
+import type { TradingAccount, AccountPhase, TradeSide, TradeInsert, Trade, Strategy, Setup } from '../../types/database';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
+import { MultiSelect } from '../ui/MultiSelect';
+import { getStrategies } from '../../services/strategies';
+import { getSetups } from '../../services/setups';
+import { upsertTradeJournal } from '../../services/tradeJournals';
+import {
+  TIMEFRAME_OPTIONS,
+  COMMON_TIMEFRAME_PRESETS,
+  MARKET_BIAS_OPTIONS,
+  TRADING_SESSION_OPTIONS,
+  CONFLUENCE_OPTIONS,
+  COMMON_CONFLUENCE_PRESETS,
+  joinDelimitedString,
+} from '../../constants/tradingOptions';
 
 interface ManualTradeFormProps {
   onSuccess?: (trade: Trade, shouldOpenJournal: boolean) => void;
@@ -73,6 +86,16 @@ export function ManualTradeForm({ onSuccess, onCancel, defaultAccountId }: Manua
   const [ticket, setTicket] = useState('');
   const [comment, setComment] = useState('');
 
+  // Analytical & Journal fields (Timeframes, Sessions, Market Bias, Confluences, Strategy & Setup)
+  const [timeframes, setTimeframes] = useState<string[]>(['15m']);
+  const [sessions, setSessions] = useState<string[]>([]);
+  const [marketBias, setMarketBias] = useState<string[]>([]);
+  const [confluences, setConfluences] = useState<string[]>([]);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [setups, setSetups] = useState<Setup[]>([]);
+  const [strategyId, setStrategyId] = useState<string>('');
+  const [setupId, setSetupId] = useState<string>('');
+
   // UI state
   const [submitting, setSubmitting] = useState(false);
   const [submitIntent, setSubmitIntent] = useState<'save' | 'journal'>('journal');
@@ -130,6 +153,25 @@ export function ManualTradeForm({ onSuccess, onCancel, defaultAccountId }: Manua
         setSelectedPhaseId('');
       });
   }, [selectedAccountId, user]);
+
+  // Load strategies and setups
+  useEffect(() => {
+    if (!user) return;
+    let isMounted = true;
+    Promise.all([getStrategies(user.id), getSetups(user.id)])
+      .then(([sList, stpList]) => {
+        if (!isMounted) return;
+        setStrategies(sList);
+        setSetups(stpList);
+      })
+      .catch((err) => {
+        console.warn('Failed to load strategies/setups for manual form', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   // Smart Profit Calculation helper
   const calculatedEstimatedProfit = useMemo(() => {
@@ -257,6 +299,32 @@ export function ManualTradeForm({ onSuccess, onCancel, defaultAccountId }: Manua
       };
 
       const created = await createTrade(tradePayload);
+
+      // Automatically persist analytical and journal details if provided
+      const hasJournalDetails =
+        timeframes.length > 0 ||
+        sessions.length > 0 ||
+        marketBias.length > 0 ||
+        confluences.length > 0 ||
+        Boolean(strategyId) ||
+        Boolean(setupId);
+
+      if (hasJournalDetails) {
+        try {
+          await upsertTradeJournal(created.id, user.id, {
+            timeframe: timeframes.length > 0 ? joinDelimitedString(timeframes) : null,
+            market_bias: marketBias.length > 0 ? joinDelimitedString(marketBias) : null,
+            confluences: confluences.length > 0 ? joinDelimitedString(confluences) : null,
+            market_context: sessions.length > 0 ? `نشست معاملاتی: ${joinDelimitedString(sessions)}` : null,
+            strategy_id: strategyId || null,
+            setup_id: setupId || null,
+            status: 'in_progress',
+          });
+        } catch (jErr) {
+          console.warn('Could not auto-save initial journal for manual trade', jErr);
+        }
+      }
+
       toast.success('معامله جدید با موفقیت ثبت شد');
 
       if (onSuccess) {
@@ -572,6 +640,100 @@ export function ManualTradeForm({ onSuccess, onCancel, defaultAccountId }: Manua
           value={comment}
           onChange={(e) => setComment(e.target.value)}
         />
+      </div>
+
+      {/* Analytical & Journal Details Section (Timeframes, Sessions, Market Bias, Confluences) */}
+      <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-gray-200/70 dark:border-gray-700/60">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+              📊 جزئیات تحلیلی و تاییده‌های معامله (ژورنال)
+            </span>
+            <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+              اختیاری
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            انتخاب چندگانه یا تکی از منوی کشویی و پیش‌فرض‌ها
+          </p>
+        </div>
+
+        {/* Timeframes & Sessions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <MultiSelect
+            label="تایم‌فریم‌های تحلیل و ورود (Timeframes)"
+            placeholder="انتخاب یک یا چند تایم‌فریم..."
+            options={TIMEFRAME_OPTIONS}
+            presets={COMMON_TIMEFRAME_PRESETS}
+            selectedValues={timeframes}
+            onChange={setTimeframes}
+            allowCustom={true}
+            customPlaceholder="تایپ تایم‌فریم دلخواه (مثلاً M2)..."
+            helperText="قابلیت انتخاب همزمان چند تایم‌فریم مانند H4 و M15 برای تحلیل چندزمانه"
+          />
+
+          <MultiSelect
+            label="نشست معاملاتی (Trading Session)"
+            placeholder="انتخاب نشست‌های فعال..."
+            options={TRADING_SESSION_OPTIONS}
+            selectedValues={sessions}
+            onChange={setSessions}
+            allowCustom={true}
+            customPlaceholder="تایپ سشن دلخواه..."
+            helperText="نشست‌های فعال بازار هنگام باز شدن یا بستن معامله"
+          />
+        </div>
+
+        {/* Market Bias & Confluences */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <MultiSelect
+            label="جهت‌گیری / بایاس بازار (Market Bias)"
+            placeholder="انتخاب بایاس مارکت..."
+            options={MARKET_BIAS_OPTIONS}
+            selectedValues={marketBias}
+            onChange={setMarketBias}
+            allowCustom={true}
+            customPlaceholder="تایپ یا انتخاب بایاس..."
+            helperText="دیدگاه ساختاری و جهت کلی قیمت در زمان ورود"
+          />
+
+          <MultiSelect
+            label="همگرایی‌ها و تاییده‌ها (Confluences)"
+            placeholder="انتخاب تاییده‌های ورود (BOS، اوردربلاک، FVG و...)..."
+            options={CONFLUENCE_OPTIONS}
+            presets={COMMON_CONFLUENCE_PRESETS}
+            selectedValues={confluences}
+            onChange={setConfluences}
+            allowCustom={true}
+            customPlaceholder="افزودن تاییدیه دلخواه..."
+            helperText="دلایل و فاکتورهای تکنیکال تاییدکننده تصمیم ورود"
+          />
+        </div>
+
+        {/* Strategy & Setup */}
+        {(strategies.length > 0 || setups.length > 0) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <Select
+              label="استراتژی معاملاتی"
+              value={strategyId}
+              onChange={(e) => setStrategyId(e.target.value)}
+              options={[
+                { value: '', label: 'بدون استراتژی' },
+                ...strategies.map(s => ({ value: s.id, label: s.name })),
+              ]}
+            />
+
+            <Select
+              label="ستاپ ورود"
+              value={setupId}
+              onChange={(e) => setSetupId(e.target.value)}
+              options={[
+                { value: '', label: 'بدون ستاپ' },
+                ...setups.map(s => ({ value: s.id, label: s.name })),
+              ]}
+            />
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
