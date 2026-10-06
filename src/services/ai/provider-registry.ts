@@ -9,6 +9,23 @@ import type { AIProvider, AIProviderConfig, AIProviderType, AIProviderState } fr
 import { AIError } from './types';
 import { getMockAIProvider } from './mock-provider';
 import { GeminiAIProvider } from './gemini-provider';
+import { OpenAICompatibleProvider } from './openai-provider';
+
+export function createAIProviderInstance(config: AIProviderConfig): AIProvider {
+  if (config.type === 'gemini') {
+    return new GeminiAIProvider({ apiKey: config.apiKey, model: config.model });
+  }
+  if (config.type === 'openai') {
+    return new OpenAICompatibleProvider('openai', { apiKey: config.apiKey, model: config.model });
+  }
+  if (config.type === 'qwen') {
+    return new OpenAICompatibleProvider('qwen', { apiKey: config.apiKey, model: config.model });
+  }
+  if (config.type === 'mock') {
+    return getMockAIProvider();
+  }
+  throw new AIError(`پرووایدر هوش مصنوعی '${config.type}' پشتیبانی نمی‌شود`, 'PROVIDER_CONFIG_ERROR', config.type);
+}
 
 export function isProductionEnvironment(): boolean {
   if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {

@@ -3,13 +3,19 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useGuest } from '../../contexts/GuestContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getAccounts } from '../../services/accounts';
-import { queryAI } from '../../services/ai/client';
-import type { AIQueryResponse } from '../../services/ai/types';
+import {
+  queryAI,
+  getSavedClientAIConfig,
+  saveClientAIConfig,
+  type UserAIProviderSettings,
+} from '../../services/ai/client';
+import type { AIQueryResponse, AIProviderType } from '../../services/ai/types';
 import type { TradingAccount } from '../../types/database';
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
 import { Badge } from '../../components/ui/Badge';
+import { Modal } from '../../components/ui/Modal';
 import { VoiceInput } from '../../components/journal/VoiceInput';
 import {
   Sparkles,
@@ -22,18 +28,53 @@ import {
   ChevronDown,
   ChevronUp,
   History,
-  ShieldAlert,
+  Settings,
+  Key,
+  Eye,
+  EyeOff,
+  Clock,
+  Calendar,
+  Layers,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 
 const SUGGESTED_QUESTIONS = [
-  'نرخ برد کلی معاملات من چقدر است؟',
   'در کدام ساعت بیشترین سود را داشته‌ام؟',
-  'عملکرد معاملات EURUSD من چطور بوده است؟',
-  'معاملات خرید (Buy) و فروش (Sell) را مقایسه کن.',
   'بهترین روزهای معاملاتی من کدام‌اند؟',
+  'معاملات خرید (Buy) و فروش (Sell) را مقایسه کن.',
+  'نرخ برد کلی معاملات من چقدر است؟',
+  'عملکرد معاملات EURUSD من چطور بوده است؟',
   'بین معاملات با رعایت قوانین و نقض قوانین چه تفاوتی وجود دارد؟',
   'میانگین مدت زمان باز بودن معاملات من چقدر است؟',
   'کارنامه کلی و شاخص‌های سودآوری حساب من چیست؟',
+];
+
+const PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string; defaultModel: string; hint: string }> = [
+  {
+    value: 'gemini',
+    label: 'Google Gemini (پیشنهادی)',
+    defaultModel: 'gemini-3.8-flash',
+    hint: 'مدل سریع و بهینه گوگل مناسب برای تحلیل‌های جامع داده',
+  },
+  {
+    value: 'openai',
+    label: 'OpenAI (GPT-4o / GPT-4o-mini)',
+    defaultModel: 'gpt-4o-mini',
+    hint: 'مدل‌های استاندارد OpenAI از طریق کلید رسمی یا پروکسی سازگار',
+  },
+  {
+    value: 'qwen',
+    label: 'Qwen / Alibaba DashScope / OpenRouter',
+    defaultModel: 'qwen-plus',
+    hint: 'مدل قدرتمند Qwen مناسب برای استدلال محاسباتی',
+  },
+  {
+    value: 'mock',
+    label: 'شبیه‌ساز آزمایشی (آفلاین بدون کلید)',
+    defaultModel: 'deterministic-mock',
+    hint: 'محاسبه ریاضی قطعی داده‌ها بدون نیاز به هیچ کلید اینترنتی',
+  },
 ];
 
 export default function AIQueryPage() {
@@ -45,6 +86,13 @@ export default function AIQueryPage() {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+
+  // AI Provider & BYOK settings
+  const [aiSettings, setAiSettings] = useState<UserAIProviderSettings>(getSavedClientAIConfig());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testingKey, setTestingKey] = useState(false);
+  const [testSuccess, setTestSuccess] = useState<string | null>(null);
 
   // Query Execution State
   const [loading, setLoading] = useState(false);
@@ -80,6 +128,33 @@ export default function AIQueryPage() {
     };
   }, [user, selectedAccountId]);
 
+  const handleSaveSettings = () => {
+    saveClientAIConfig(aiSettings);
+    toast.success('تنظیمات ارائه‌دهنده هوش مصنوعی ذخیره شد.');
+    setIsSettingsOpen(false);
+  };
+
+  const handleTestConnection = async () => {
+    setTestingKey(true);
+    setTestSuccess(null);
+    try {
+      await queryAI({
+        question: 'تست اتصال و بررسی سلامت کلید',
+        accountId: selectedAccountId || undefined,
+        isGuest,
+        providerConfig: aiSettings,
+      });
+      setTestSuccess('اتصال به ارائه‌دهنده هوش مصنوعی با موفقیت برقرار شد.');
+      toast.success('اتصال به ارائه‌دهنده موفقیت‌آمیز بود.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در برقراری اتصال با ارائه‌دهنده';
+      toast.error(msg);
+      setTestSuccess(null);
+    } finally {
+      setTestingKey(false);
+    }
+  };
+
   const handleSubmit = async (e?: FormEvent, overrideQuestion?: string) => {
     if (e) e.preventDefault();
     const queryText = (overrideQuestion ?? question).trim();
@@ -98,6 +173,7 @@ export default function AIQueryPage() {
         question: queryText,
         accountId: selectedAccountId || undefined,
         isGuest,
+        providerConfig: aiSettings,
       });
 
       setResult(res);
@@ -126,6 +202,8 @@ export default function AIQueryPage() {
     setError(null);
   };
 
+  const currentProviderInfo = PROVIDER_OPTIONS.find((p) => p.value === aiSettings.provider) || PROVIDER_OPTIONS[0];
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12" dir="rtl">
       {/* Header */}
@@ -146,7 +224,22 @@ export default function AIQueryPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+          {/* Provider badge & Settings trigger button */}
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-1.5 text-xs py-1 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 transition-colors shadow-sm"
+          >
+            <Settings className="w-3.5 h-3.5 text-blue-500" />
+            <span>پرووایدر: <strong>{currentProviderInfo.label.split(' ')[0]}</strong></span>
+            {aiSettings.apiKey ? (
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
+                کلید شخصی
+              </span>
+            ) : null}
+          </button>
+
           <Badge variant="success" className="text-xs gap-1.5 py-1 px-2.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>آماده پاسخگویی</span>
@@ -159,11 +252,163 @@ export default function AIQueryPage() {
         </div>
       </div>
 
+      {/* Settings Modal */}
+      <Modal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        title="تنظیمات ارائه‌دهنده هوش مصنوعی (AI Provider & Key)"
+        size="md"
+      >
+        <div className="space-y-4 p-1">
+          <div className="p-3 rounded-lg bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 text-xs text-blue-800 dark:text-blue-300 leading-relaxed flex items-start gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <span>
+              <strong>امنیت کلیدها:</strong> کلید API شخصی شما صرفاً در مرورگر خودتان ذخیره می‌شود و برای هر درخواست از طریق لایه امن سرور ارسال می‌گردد. در صورت خالی بودن، سیستم از کلید سرور استفاده می‌کند.
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              ارائه‌دهنده هوش مصنوعی (Provider):
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PROVIDER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setAiSettings((prev) => ({
+                      ...prev,
+                      provider: opt.value,
+                      model: prev.model || opt.defaultModel,
+                    }));
+                  }}
+                  className={`p-2.5 text-right rounded-lg border text-xs transition-all ${
+                    aiSettings.provider === opt.value
+                      ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 text-blue-900 dark:text-blue-100 font-bold shadow-sm'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>{opt.label}</span>
+                    {aiSettings.provider === opt.value && <CheckCircle className="w-3.5 h-3.5 text-blue-500" />}
+                  </div>
+                  <span className="text-[10px] text-gray-400 block mt-1 font-normal">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {aiSettings.provider !== 'mock' && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  کلید دسترسی شخصی (API Key):
+                </label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={aiSettings.apiKey || ''}
+                    onChange={(e) => setAiSettings((prev) => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder={`کلید اختصاصی ${currentProviderInfo.label.split(' ')[0]} را وارد کنید (اختیاری)`}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-2.5 pl-20 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <div className="absolute left-2 top-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((prev) => !prev)}
+                      className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                      {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                    {aiSettings.apiKey && (
+                      <button
+                        type="button"
+                        onClick={() => setAiSettings((prev) => ({ ...prev, apiKey: '' }))}
+                        className="text-[10px] text-red-500 px-1 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950"
+                      >
+                        پاک کردن
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  مدل انتخابی (Model Name):
+                </label>
+                <input
+                  type="text"
+                  value={aiSettings.model || currentProviderInfo.defaultModel}
+                  onChange={(e) => setAiSettings((prev) => ({ ...prev, model: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-2.5 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                  {['gemini-3.8-flash', 'gpt-4o-mini', 'gpt-4o', 'qwen-plus'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setAiSettings((prev) => ({ ...prev, model: m }))}
+                      className="text-[10px] px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-blue-100 dark:hover:bg-blue-900"
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {testSuccess && (
+            <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              <span>{testSuccess}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testingKey}
+              onClick={handleTestConnection}
+              className="text-xs gap-1"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              <span>{testingKey ? 'در حال تست...' : 'تست اتصال'}</span>
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-xs"
+              >
+                انصراف
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleSaveSettings}
+                className="text-xs"
+              >
+                ذخیره تنظیمات
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       {/* Safety Notice Banner */}
       <div className="flex items-start gap-3 p-3.5 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/40 dark:bg-blue-950/20 text-xs text-blue-800 dark:text-blue-300">
         <Info className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
         <div className="leading-relaxed">
-          <strong>مرز امنیتی هوش مصنوعی:</strong> این سیستم صرفاً به منظور تحلیل آماری، ریشه‌یابی خطاها و تفسیر داده‌ها طراحی شده است. هوش مصنوعی هیچ دسترسی مستقیمی به اجرای معاملات یا تغییر اطلاعات ندارد و پایگاه‌داده معاملات شما همواره محفوظ و غیرقابل‌تغییر باقی می‌ماند.
+          <strong>مرز امنیتی هوش مصنوعی:</strong> تحلیل‌ها بر مبنای موتور محاسباتی قطعی ژورنال استخراج می‌شوند. هوش مصنوعی هیچ دسترسی مستقیمی برای تغییر پایگاه‌داده یا ثبت معاملات ندارد و از ارائه‌دهنده دلخواه شما با امنیت کامل استفاده می‌کند.
         </div>
       </div>
 
@@ -207,7 +452,7 @@ export default function AIQueryPage() {
                   handleSubmit();
                 }
               }}
-              placeholder="سوال خود را درباره معاملاتتان بنویسید (مثلاً: در کدام ساعت بیشترین سود را داشته‌ام؟ یا عملکرد EURUSD چطور بوده؟)..."
+              placeholder="سوال خود را درباره معاملاتتان بنویسید (مثلاً: در کدام ساعت بیشترین سود را داشته‌ام؟ یا معاملات خرید و فروش را مقایسه کن)..."
               disabled={loading}
               className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-3.5 pl-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none leading-relaxed transition-colors"
             />
@@ -306,29 +551,41 @@ export default function AIQueryPage() {
 
       {/* Error Notice */}
       {error && !loading && (
-        <div className="p-4 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-950/20 flex items-start justify-between gap-3">
+        <div className="p-4 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/60 dark:bg-red-950/20 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <div>
               <h3 className="text-sm font-bold text-red-800 dark:text-red-300">
-                خطا در اجرای درخواست
+                خطا در پردازش درخواست
               </h3>
               <p className="text-xs text-red-700 dark:text-red-400 mt-1 leading-relaxed">
                 {error}
               </p>
             </div>
           </div>
-          {lastQuestion && (
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => handleSubmit(undefined, lastQuestion)}
-              className="text-xs shrink-0 border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40"
+              onClick={() => setIsSettingsOpen(true)}
+              className="text-xs border-red-300 dark:border-red-800 text-red-700 dark:text-red-300"
             >
-              تلاش مجدد
+              <Key className="w-3.5 h-3.5 ml-1" />
+              تنظیم کلید و ارائه‌دهنده
             </Button>
-          )}
+            {lastQuestion && (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => handleSubmit(undefined, lastQuestion)}
+                className="text-xs bg-red-600 hover:bg-red-700 text-white"
+              >
+                تلاش مجدد
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -341,7 +598,7 @@ export default function AIQueryPage() {
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  پاسخ و تحلیل تحلیلی:
+                  پاسخ و تحلیل آماری:
                 </span>
                 <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
                   «{lastQuestion}»
@@ -376,11 +633,116 @@ export default function AIQueryPage() {
               )}
             </div>
 
+            {/* Dimensional Breakdown Visual Cards (If present in query) */}
+            {result.dataSummary.breakdowns && Object.keys(result.dataSummary.breakdowns).length > 0 && (
+              <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-blue-50/20 dark:bg-blue-950/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-blue-500" />
+                    <span>تحلیل تفکیکی ابعاد کوئری (Dimensional Breakdown)</span>
+                  </span>
+                </div>
+
+                {/* Hourly breakdown table */}
+                {result.dataSummary.breakdowns.hourly && result.dataSummary.breakdowns.hourly.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-gray-500 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      <span>تفکیک عملکرد بر اساس ساعت‌های شبانه‌روز:</span>
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                      {result.dataSummary.breakdowns.hourly.map((h: any) => (
+                        <div
+                          key={h.hour}
+                          className={`p-2 rounded-lg border text-center text-xs ${
+                            h.netPnl > 0
+                              ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
+                              : h.netPnl < 0
+                              ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                          }`}
+                        >
+                          <span className="text-[10px] text-gray-400 block font-mono">{h.label}</span>
+                          <span className="font-bold block mt-0.5">
+                            {h.netPnl >= 0 ? '+' : ''}{h.netPnl.toFixed(2)}$
+                          </span>
+                          <span className="text-[10px] opacity-80 block">
+                            {h.trades} معامله ({h.winRate?.toFixed(0) || '0'}%)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Day of week breakdown */}
+                {result.dataSummary.breakdowns.dayOfWeek && result.dataSummary.breakdowns.dayOfWeek.length > 0 && (
+                  <div className="space-y-1.5 pt-2">
+                    <span className="text-[11px] text-gray-500 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>تفکیک عملکرد در روزهای هفته:</span>
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                      {result.dataSummary.breakdowns.dayOfWeek.map((d: any) => (
+                        <div
+                          key={d.day}
+                          className={`p-2 rounded-lg border text-center text-xs ${
+                            d.netPnl > 0
+                              ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
+                              : d.netPnl < 0
+                              ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                          }`}
+                        >
+                          <span className="text-[11px] font-bold block">{d.label}</span>
+                          <span className="font-bold block mt-0.5">
+                            {d.netPnl >= 0 ? '+' : ''}{d.netPnl.toFixed(2)}$
+                          </span>
+                          <span className="text-[10px] opacity-80 block">
+                            {d.trades} معامله ({d.winRate?.toFixed(0) || '0'}%)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Side (Buy vs Sell) breakdown */}
+                {result.dataSummary.breakdowns.bySide && result.dataSummary.breakdowns.bySide.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                    {result.dataSummary.breakdowns.bySide.map((s: any) => (
+                      <div
+                        key={s.key}
+                        className="p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <span className="font-bold text-gray-900 dark:text-gray-100">
+                            {s.key.toLowerCase() === 'buy' ? 'معاملات خرید (Buy / Long)' : 'معاملات فروش (Sell / Short)'}
+                          </span>
+                          <span className="text-[11px] text-gray-400 block mt-0.5">
+                            {s.trades} معامله | فاکتور سود: {s.profitFactor.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="text-left">
+                          <span className={`font-bold block ${s.netPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {s.netPnl >= 0 ? '+' : ''}{s.netPnl.toFixed(2)}$
+                          </span>
+                          <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                            وین ریت: {s.winRate.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Deterministic Mathematical Facts Footer */}
             <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850/40">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5">
-                  <span>📊 حقایق محاسباتی قطعی سیستم (منبع حقیقت)</span>
+                  <span>📊 شاخص‌های قطعی و ریاضی محاسبات (منبع موثق)</span>
                 </span>
                 <span className="text-[11px] text-gray-400">
                   حجم نمونه: {result.dataSummary.sampleSize} معامله
@@ -389,7 +751,7 @@ export default function AIQueryPage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div className="p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-center">
-                  <span className="text-[11px] text-gray-400 block">تعداد معاملات</span>
+                  <span className="text-[11px] text-gray-400 block">تعداد کل معاملات</span>
                   <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
                     {result.dataSummary.sampleSize}
                   </span>
@@ -437,10 +799,10 @@ export default function AIQueryPage() {
                 onClick={() => setShowQueryPlan((prev) => !prev)}
                 className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               >
-                <span>نمایش برنامه استخراج داده (Query Plan)</span>
+                <span>نمایش ساختار استخراج داده (Query Plan)</span>
                 {showQueryPlan ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
-              <span className="text-[11px] text-gray-400">تایید شده بر اساس Query DSL مجاز</span>
+              <span className="text-[11px] text-gray-400">تایید شده با Query DSL مجاز</span>
             </div>
 
             {showQueryPlan && (

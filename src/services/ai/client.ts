@@ -1,28 +1,79 @@
 // ============================================================
 // Client AI Service
 // Client-side adapter communicating with server API boundary
-// Never contains AI API keys; uses Supabase Bearer authentication
+// Supports user-selected provider & Bring Your Own Key (BYOK)
+// Uses Supabase Bearer authentication; proxies requests to /api/ai/query
 // ============================================================
 
 import { supabase, isSupabaseConfigured } from '../supabase';
-import type { AIQueryResponse } from './types';
+import type { AIQueryResponse, AIProviderType } from './types';
 import { AIError } from './types';
 import { getMockAIProvider } from './mock-provider';
 import { MockStorage } from '../mockStorage';
 import { calculateCoreMetrics, classifyTrades } from '../analytics/metrics';
+
+export interface UserAIProviderSettings {
+  provider: AIProviderType;
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+}
 
 export interface ClientAIQueryOptions {
   question: string;
   accountId?: string;
   phaseId?: string;
   isGuest?: boolean;
+  providerConfig?: UserAIProviderSettings;
+}
+
+const STORAGE_KEY = 'fx_journal_user_ai_settings';
+
+/**
+ * Retrieve saved user AI settings from localStorage
+ */
+export function getSavedClientAIConfig(): UserAIProviderSettings {
+  if (typeof window === 'undefined') {
+    return { provider: 'gemini' };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { provider: 'gemini' };
+    return JSON.parse(raw);
+  } catch {
+    return { provider: 'gemini' };
+  }
+}
+
+/**
+ * Persist user AI settings to localStorage
+ */
+export function saveClientAIConfig(settings: UserAIProviderSettings): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch (err) {
+    console.warn('Failed to save AI settings to localStorage', err);
+  }
+}
+
+/**
+ * Clear saved user AI settings
+ */
+export function clearSavedClientAIConfig(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 /**
  * Send an analytical question to the secure server AI endpoint
  */
 export async function queryAI(options: ClientAIQueryOptions): Promise<AIQueryResponse> {
-  const { question, accountId, phaseId, isGuest = false } = options;
+  const { question, accountId, phaseId, isGuest = false, providerConfig } = options;
 
   if (!question || question.trim().length === 0) {
     throw new AIError('لطفاً سوال خود را وارد کنید.', 'QUERY_VALIDATION_FAILED');
@@ -78,6 +129,7 @@ export async function queryAI(options: ClientAIQueryOptions): Promise<AIQueryRes
         question: question.trim(),
         accountId: accountId || undefined,
         phaseId: phaseId || undefined,
+        providerConfig: providerConfig || undefined,
       }),
     });
 

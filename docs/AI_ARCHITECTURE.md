@@ -303,9 +303,9 @@ Tests cover:
 - Use smaller models for simple tasks
 - Monitor usage in production
 
-## Migration Path
+## Migration Path & Status
 
-### Phase 1 (Current)
+### Phase 12 (Completed)
 - ✅ Architecture foundation
 - ✅ Mock provider
 - ✅ Query DSL
@@ -313,19 +313,22 @@ Tests cover:
 - ✅ Context builder
 - ✅ Security model
 
-### Phase 2 (Future)
-- Real provider integration (OpenAI/Qwen)
-- AI Query UI
-- Server-side API boundary
-- Usage tracking
+### Phase 13 (Completed — Production Ready)
+- ✅ **Real Provider Integration**: Production-ready Google Gemini adapter (`@google/genai`, `gemini-3.8-flash`), plus OpenAI & Qwen / DashScope adapters.
+- ✅ **Client BYOK (Bring Your Own Key)**: Support for user-configured AI providers and private keys in UI settings with local browser persistence.
+- ✅ **Server-Side API Boundary**: Secure endpoints in `api/ai/query.ts` (Vercel Serverless) and `server.ts` (Express full-stack proxy). No client secrets exposed.
+- ✅ **Authentication & Authorization**: Strict Supabase Bearer token verification; server-side verification of account and phase ownership.
+- ✅ **Complete Query Execution Engine**: Deterministic calculations across all DSL dimensions (`hour`, `dayOfWeek`, `symbol`, `side`, `month`, `ruleAdherence`, `durationBucket`, `strategy`, `setup`). Rich dimensional breakdowns returned to UI.
+- ✅ **Hardened CORS Policy**: Strict origin validation in production, preventing wildcard access for authenticated endpoints.
+- ✅ **Native Persian RTL UI**: Responsive AI Query UI (`/app/ai`) with voice input, prompt suggestions, mathematical source-of-truth cards, dimensional breakdown visualizers, and query plan transparency.
 
-### Phase 3 (Future)
+### Phase 14 (Future)
 - AI Trade Review
 - AI Auto-Tagging
 - AI Weekly/Monthly Reports
 - Pattern Analysis
 
-### Phase 4 (Future)
+### Phase 15 (Future)
 - AI Chart Generation
 - Advanced Analytics
 - Predictive Insights

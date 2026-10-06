@@ -167,6 +167,7 @@ export interface AIQueryResponse {
     sampleSize: number;
     period: string;
     metrics: Record<string, number | null>;
+    breakdowns?: Record<string, any>;
   };
   chart?: {
     type: string;
