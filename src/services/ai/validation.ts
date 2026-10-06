@@ -285,6 +285,35 @@ export function validateQueryPlanOwnership(
 }
 
 /**
+ * Detect prompt injection attempts in raw user prompts
+ */
+export function detectPromptInjection(input: string): boolean {
+  if (!input || typeof input !== 'string') return false;
+  const lower = input.toLowerCase();
+  const patterns = [
+    /ignore (all )?(previous|above) instructions/i,
+    /system prompt/i,
+    /you are now (a|an)?/i,
+    /reveal (the )?(database|credentials|keys|password)/i,
+    /drop table/i,
+    /select\s+\*\s+from/i,
+    /union\s+select/i,
+    /exec\s*\(/i,
+  ];
+  return patterns.some(p => p.test(lower));
+}
+
+/**
+ * Sanitize user input by trimming and stripping control characters
+ */
+export function sanitizeUserInput(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .trim();
+}
+
+/**
  * Check if a metric is allowed
  */
 export function isAllowedMetric(metric: string): metric is AIMetric {

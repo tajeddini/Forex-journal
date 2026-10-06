@@ -44,6 +44,7 @@ const ManualTradePage = lazyWithRetry(() => import('./pages/trades/ManualTradePa
 const TradeDetailPage = lazyWithRetry(() => import('./pages/trades/TradeDetailPage'));
 const AnalyticsPage = lazyWithRetry(() => import('./pages/analytics/AnalyticsPage'));
 const WhatIfPage = lazyWithRetry(() => import('./pages/analytics/WhatIfPage'));
+const AIQueryPage = lazyWithRetry(() => import('./pages/ai/AIQueryPage'));
 const CalendarPage = lazyWithRetry(() => import('./pages/calendar/CalendarPage'));
 const ReviewsPage = lazyWithRetry(() => import('./pages/reviews/ReviewsPage'));
 const CustomDashboardPage = lazyWithRetry(() => import('./pages/dashboard/CustomDashboardPage'));
@@ -191,6 +192,14 @@ const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <WhatIfPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: 'ai',
+        element: (
+          <SuspenseWrapper>
+            <AIQueryPage />
           </SuspenseWrapper>
         ),
       },

@@ -8,6 +8,7 @@
 import type { AIProvider, AIProviderConfig, AIProviderType, AIProviderState } from './types';
 import { AIError } from './types';
 import { getMockAIProvider } from './mock-provider';
+import { GeminiAIProvider } from './gemini-provider';
 
 export function isProductionEnvironment(): boolean {
   if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
@@ -32,7 +33,11 @@ export class AIProviderRegistry {
   private isProduction: boolean = false;
   private allowMockInProduction: boolean = false;
 
-  constructor(options?: { isProduction?: boolean; allowMockInProduction?: boolean }) {
+  constructor(options?: {
+    isProduction?: boolean;
+    allowMockInProduction?: boolean;
+    defaultProvider?: AIProviderType;
+  }) {
     this.isProduction = options?.isProduction ?? isProductionEnvironment();
     this.allowMockInProduction = options?.allowMockInProduction ?? false;
 
@@ -40,12 +45,34 @@ export class AIProviderRegistry {
     const mock = getMockAIProvider();
     this.registerProvider(mock);
 
-    // Development/Test: Mock provider is active by default.
-    // Production: NO silent mock fallback. Must be explicitly configured.
-    if (!this.isProduction || this.allowMockInProduction) {
+    // Register real Gemini provider
+    const gemini = new GeminiAIProvider();
+    this.registerProvider(gemini);
+
+    // Check server environment configuration
+    const envProvider = options?.defaultProvider ?? (typeof process !== 'undefined' ? process.env?.AI_PROVIDER : undefined);
+
+    if (envProvider === 'gemini') {
+      if (gemini.isAvailable()) {
+        this.currentProvider = gemini;
+        this.currentConfig = { type: 'gemini', model: gemini.type };
+      } else {
+        this.currentProvider = null;
+        this.currentConfig = null;
+      }
+    } else if (envProvider === 'mock') {
+      if (this.isProduction && !this.allowMockInProduction) {
+        this.currentProvider = null;
+        this.currentConfig = null;
+      } else {
+        this.currentProvider = mock;
+        this.currentConfig = { type: 'mock' };
+      }
+    } else if (!this.isProduction || this.allowMockInProduction) {
       this.currentProvider = mock;
       this.currentConfig = { type: 'mock' };
     } else {
+      // In production without configured key: NO silent mock fallback
       this.currentProvider = null;
       this.currentConfig = null;
     }

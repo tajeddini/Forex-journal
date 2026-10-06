@@ -21,7 +21,7 @@ export interface AIProvider {
   readonly type: AIProviderType;
   
   generateText(prompt: string, options?: AIGenerateOptions): Promise<AIResponse<string>>;
-  generateStructured<T>(prompt: string, schema: AISchemaDefinition, options?: AIGenerateOptions): Promise<AIResponse<T>>;
+  generateStructured<T>(prompt: string, schema?: AISchemaDefinition, options?: AIGenerateOptions): Promise<AIResponse<T>>;
   streamText?(prompt: string, options?: AIGenerateOptions): AsyncIterable<string>;
   
   isAvailable(): boolean;

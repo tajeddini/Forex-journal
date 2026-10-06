@@ -10,6 +10,7 @@ const navItems = [
   { path: '/app/trades', label: 'معاملات', icon: TradesIcon },
   { path: '/app/journal', label: 'ژورنال', icon: JournalIcon },
   { path: '/app/analytics', label: 'آنالیتیکس', icon: AnalyticsIcon },
+  { path: '/app/ai', label: 'دستیار هوشمند (AI)', icon: AIIcon },
   { path: '/app/calendar', label: 'تقویم', icon: CalendarIcon },
   { path: '/app/reviews', label: 'بازبینی', icon: ReviewsIcon },
   { path: '/app/import', label: 'ورود اطلاعات', icon: ImportIcon },
@@ -228,6 +229,14 @@ function AnalyticsIcon() {
   return (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  );
+}
+
+function AIIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   );
 }
