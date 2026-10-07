@@ -48,7 +48,7 @@ export class ClaudeAIProvider implements AIProvider {
 
   async generateStructured<T>(prompt: string, _schema?: AISchemaDefinition, options?: AIGenerateOptions): Promise<AIResponse<T>> {
     const result = await this.generateText(`${prompt}\n\nReturn only valid JSON. Do not use markdown fences.`, options);
-    try { return { ...result, data: JSON.parse(result.data.replace(/^\\`\\`\\`json\\s*/i, '').replace(/\\s*\\`\\`\\`$/i, '').trim()) as T }; }
+    try { return { ...result, data: JSON.parse(result.data.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim()) as T }; }
     catch (err) { throw new AIError('پاسخ Claude به صورت JSON معتبر نبود.', 'INVALID_RESPONSE', 'claude', err instanceof Error ? err : undefined); }
   }
 
