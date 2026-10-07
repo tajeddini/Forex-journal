@@ -70,6 +70,18 @@ const PROVIDER_OPTIONS: Array<{ value: AIProviderType; label: string; defaultMod
     hint: 'مدل قدرتمند Qwen مناسب برای استدلال محاسباتی',
   },
   {
+    value: 'claude',
+    label: 'Anthropic Claude',
+    defaultModel: 'claude-3-5-sonnet-latest',
+    hint: 'مدل‌های Claude از طریق API رسمی Anthropic',
+  },
+  {
+    value: 'custom',
+    label: 'Custom / OpenAI-Compatible',
+    defaultModel: 'custom-model',
+    hint: 'هر سرویس سازگار با API استاندارد OpenAI',
+  },
+  {
     value: 'mock',
     label: 'شبیه‌ساز آزمایشی (آفلاین بدون کلید)',
     defaultModel: 'deterministic-mock',
@@ -263,7 +275,7 @@ export default function AIQueryPage() {
           <div className="p-3 rounded-lg bg-blue-50/70 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 text-xs text-blue-800 dark:text-blue-300 leading-relaxed flex items-start gap-2">
             <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
             <span>
-              <strong>امنیت کلیدها:</strong> کلید API شخصی شما صرفاً در مرورگر خودتان ذخیره می‌شود و برای هر درخواست از طریق لایه امن سرور ارسال می‌گردد. در صورت خالی بودن، سیستم از کلید سرور استفاده می‌کند.
+              <strong>امنیت کلیدها:</strong> کلید API شخصی شما فقط در حافظه همین نشست نگهداری می‌شود و هرگز در localStorage، sessionStorage، کوکی یا URL ذخیره نمی‌شود. کلید برای هر درخواست فقط از طریق HTTPS به لایه سرور ارسال می‌شود و با بارگذاری مجدد صفحه پاک خواهد شد.
             </span>
           </div>
 
@@ -333,6 +345,22 @@ export default function AIQueryPage() {
                   </div>
                 </div>
               </div>
+
+              {aiSettings.provider === 'custom' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    Base URL سرویس سفارشی:
+                  </label>
+                  <input
+                    type="url"
+                    value={aiSettings.baseUrl || ''}
+                    onChange={(e) => setAiSettings((prev) => ({ ...prev, baseUrl: e.target.value }))}
+                    placeholder="https://example.com/v1"
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-2.5 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">باید endpoint سازگار با /chat/completions ارائه کند.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
