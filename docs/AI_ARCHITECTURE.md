@@ -233,40 +233,35 @@ const context = await buildAIContext(
 - ❌ Access screenshots without explicit permission
 - ❌ Bypass RLS policies
 
-## Future Provider Integration
+## Provider Integration (Current)
 
-### Adding a New Provider
+Phase 13 uses a provider-agnostic server boundary. The supported production adapters are:
 
-1. Create provider class implementing `AIProvider` interface
-2. Register in provider registry
-3. Add configuration UI
-4. Test with mock data first
+- **Google Gemini** — official `@google/genai` adapter.
+- **OpenAI** — OpenAI Chat Completions.
+- **Qwen / DashScope** — OpenAI-compatible Chat Completions.
+- **Anthropic Claude** — official Messages API adapter.
+- **Custom OpenAI-compatible** — user supplies a Base URL and model.
 
-### Example: OpenAI Provider
+Provider selection is explicit. Production never silently falls back to Mock.
 
-```typescript
-class OpenAIProvider implements AIProvider {
-  async generateText(prompt: string): Promise<AIResponse<string>> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    
-    const data = await response.json();
-    return {
-      data: data.choices[0].message.content,
-      usage: data.usage
-    };
-  }
-}
-```
+### BYOK Security
+
+- API keys are accepted only over the authenticated HTTPS API request.
+- API keys are held in browser memory only for the current page session.
+- API keys are **not** persisted to `localStorage`, `sessionStorage`, IndexedDB, cookies, URLs, Git, or build-time `VITE_` variables.
+- Reloading the page clears a BYOK key.
+- The server forwards the key only to the selected provider for that request.
+- Custom OpenAI-compatible providers must provide an explicit Base URL.
+- The server does not return API keys to the client.
+
+### Adding a Provider
+
+1. Implement `AIProvider`.
+2. Register the adapter in `provider-registry.ts`.
+3. Add its UI configuration in `AIQueryPage.tsx`.
+4. Add provider-specific tests.
+5. Verify production behavior with no silent Mock fallback.
 
 ## Testing
 
