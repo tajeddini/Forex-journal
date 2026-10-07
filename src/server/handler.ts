@@ -17,21 +17,24 @@ function applySecureCors(req: any, res: any): boolean {
 
   if (isProd) {
     // In production, strictly restrict allowed origins (no wildcard with Bearer auth)
-    const allowedPatterns = [
+    const allowedOrigins = [
       process.env.APP_URL,
+      process.env.VERCEL_PROJECT_PRODUCTION_URL,
       process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-    ].filter(Boolean) as string[];
+    ]
+      .filter(Boolean)
+      .map(value => String(value).replace(/\/$/, '').toLowerCase());
 
-    const isVercelApp = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
-    const isExplicit = allowedPatterns.some(p => p.toLowerCase() === origin.toLowerCase());
+    const normalizedOrigin = String(origin).replace(/\/$/, '').toLowerCase();
 
-    if (origin && (isVercelApp || isExplicit)) {
+    if (!origin) {
+      // Same-origin/server-to-server request: no CORS allow-origin header is required.
+    } else if (allowedOrigins.includes(normalizedOrigin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else if (!origin) {
-      // Same-origin request
     } else {
-      res.setHeader('Access-Control-Allow-Origin', allowedPatterns[0] || 'null');
+      // Never reflect or wildcard an untrusted origin.
+      res.setHeader('Access-Control-Allow-Origin', 'null');
     }
   } else {
     // Development/testing
