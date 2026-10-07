@@ -27,46 +27,25 @@ export interface ClientAIQueryOptions {
   providerConfig?: UserAIProviderSettings;
 }
 
-const STORAGE_KEY = 'fx_journal_user_ai_settings';
+let inMemoryAIConfig: UserAIProviderSettings = { provider: 'gemini' };
 
 /**
- * Retrieve saved user AI settings from localStorage
+ * API keys are intentionally kept in memory only.
+ * They are never written to localStorage/sessionStorage, IndexedDB, cookies, or URLs.
+ * Reloading the page clears the key and requires the user to enter it again.
  */
 export function getSavedClientAIConfig(): UserAIProviderSettings {
-  if (typeof window === 'undefined') {
-    return { provider: 'gemini' };
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { provider: 'gemini' };
-    return JSON.parse(raw);
-  } catch {
-    return { provider: 'gemini' };
-  }
+  return { ...inMemoryAIConfig };
 }
 
-/**
- * Persist user AI settings to localStorage
- */
+/** Keep settings only for the current page session; never persist secrets client-side. */
 export function saveClientAIConfig(settings: UserAIProviderSettings): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch (err) {
-    console.warn('Failed to save AI settings to localStorage', err);
-  }
+  inMemoryAIConfig = { ...settings };
 }
 
-/**
- * Clear saved user AI settings
- */
+/** Clear the in-memory provider configuration. */
 export function clearSavedClientAIConfig(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+  inMemoryAIConfig = { provider: 'gemini' };
 }
 
 /**
