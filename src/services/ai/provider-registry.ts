@@ -10,16 +10,24 @@ import { AIError } from './types';
 import { getMockAIProvider } from './mock-provider';
 import { GeminiAIProvider } from './gemini-provider';
 import { OpenAICompatibleProvider } from './openai-provider';
+import { ClaudeAIProvider } from './claude-provider';
 
 export function createAIProviderInstance(config: AIProviderConfig): AIProvider {
   if (config.type === 'gemini') {
     return new GeminiAIProvider({ apiKey: config.apiKey, model: config.model });
   }
   if (config.type === 'openai') {
-    return new OpenAICompatibleProvider('openai', { apiKey: config.apiKey, model: config.model });
+    return new OpenAICompatibleProvider('openai', { apiKey: config.apiKey, model: config.model, baseUrl: config.baseUrl });
   }
   if (config.type === 'qwen') {
-    return new OpenAICompatibleProvider('qwen', { apiKey: config.apiKey, model: config.model });
+    return new OpenAICompatibleProvider('qwen', { apiKey: config.apiKey, model: config.model, baseUrl: config.baseUrl });
+  }
+  if (config.type === 'claude') {
+    return new ClaudeAIProvider({ apiKey: config.apiKey, model: config.model, baseUrl: config.baseUrl });
+  }
+  if (config.type === 'custom') {
+    if (!config.baseUrl?.trim()) throw new AIError('برای پرووایدر سفارشی، Base URL الزامی است.', 'PROVIDER_CONFIG_ERROR', 'custom');
+    return new OpenAICompatibleProvider('custom', { apiKey: config.apiKey, model: config.model, baseUrl: config.baseUrl });
   }
   if (config.type === 'mock') {
     return getMockAIProvider();
