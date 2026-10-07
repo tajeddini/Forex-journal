@@ -24,11 +24,11 @@ export class OpenAICompatibleProvider implements AIProvider {
   private baseUrl: string;
 
   constructor(
-    type: 'openai' | 'qwen' = 'openai',
+    type: 'openai' | 'qwen' | 'custom' = 'openai',
     config?: Partial<AIProviderConfig> & { baseUrl?: string }
   ) {
     this.type = type;
-    this.name = type === 'qwen' ? 'Qwen / DashScope' : 'OpenAI';
+    this.name = type === 'qwen' ? 'Qwen / DashScope' : type === 'custom' ? 'Custom OpenAI-compatible' : 'OpenAI';
 
     const envKey =
       type === 'qwen'
