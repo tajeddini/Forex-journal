@@ -33,7 +33,9 @@ export class OpenAICompatibleProvider implements AIProvider {
     const envKey =
       type === 'qwen'
         ? (typeof process !== 'undefined' ? process.env?.QWEN_API_KEY || process.env?.AI_API_KEY : null)
-        : (typeof process !== 'undefined' ? process.env?.OPENAI_API_KEY || process.env?.AI_API_KEY : null);
+        : type === 'custom'
+          ? null
+          : (typeof process !== 'undefined' ? process.env?.OPENAI_API_KEY || process.env?.AI_API_KEY : null);
 
     this.apiKey =
       config && 'apiKey' in config
