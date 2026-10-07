@@ -43,6 +43,9 @@ export class OpenAICompatibleProvider implements AIProvider {
     if (type === 'qwen') {
       this.defaultModel = config?.model || (typeof process !== 'undefined' ? process.env?.AI_MODEL : undefined) || 'qwen-plus';
       this.baseUrl = config?.baseUrl || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+    } else if (type === 'custom') {
+      this.defaultModel = config?.model || 'custom-model';
+      this.baseUrl = (config?.baseUrl || '').replace(/\\/$/, '');
     } else {
       this.defaultModel = config?.model || (typeof process !== 'undefined' ? process.env?.AI_MODEL : undefined) || 'gpt-4o-mini';
       this.baseUrl = config?.baseUrl || 'https://api.openai.com/v1';
