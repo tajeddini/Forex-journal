@@ -20,6 +20,7 @@ import {
 } from '../analytics/aggregation';
 import { analyzeByRuleAdherence } from '../analytics/psychologyAnalytics';
 import { getAIProviderRegistry, createAIProviderInstance } from './provider-registry';
+import { validateCustomProviderBaseUrl } from './custom-provider-security';
 import type {
   Trade,
   TradingAccount,
@@ -257,6 +258,7 @@ export async function executeServerAIQuery(
   let provider: AIProvider;
 
   if (providerConfig?.provider) {
+    if (providerConfig.provider === 'custom') await validateCustomProviderBaseUrl(providerConfig.baseUrl || '');
     // User selected specific provider in UI with optional custom key/model
     provider = createAIProviderInstance({
       type: providerConfig.provider,
@@ -573,6 +575,7 @@ export async function executeServerTradeReview(request: {
   // Resolve Provider
   let provider: AIProvider;
   if (providerConfig?.provider) {
+    if (providerConfig.provider === 'custom') await validateCustomProviderBaseUrl(providerConfig.baseUrl || '');
     provider = createAIProviderInstance({
       type: providerConfig.provider,
       apiKey: providerConfig.apiKey,
@@ -641,6 +644,7 @@ export async function executeServerAutoTagging(request: {
 
   let provider: AIProvider;
   if (providerConfig?.provider) {
+    if (providerConfig.provider === 'custom') await validateCustomProviderBaseUrl(providerConfig.baseUrl || '');
     provider = createAIProviderInstance({
       type: providerConfig.provider,
       apiKey: providerConfig.apiKey,
@@ -734,6 +738,7 @@ export async function executeServerPeriodicReview(request: {
 
   let provider: AIProvider;
   if (providerConfig?.provider) {
+    if (providerConfig.provider === 'custom') await validateCustomProviderBaseUrl(providerConfig.baseUrl || '');
     provider = createAIProviderInstance({
       type: providerConfig.provider,
       apiKey: providerConfig.apiKey,
