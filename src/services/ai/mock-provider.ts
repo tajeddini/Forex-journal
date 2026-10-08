@@ -43,7 +43,7 @@ export class MockAIProvider implements AIProvider {
     await this.simulateDelay();
 
     // Generate mock structured response based on schema
-    const response = this.generateMockStructuredResponse<T>(schema);
+    const response = this.generateMockStructuredResponse<T>(schema, prompt);
 
     return {
       data: response,
@@ -122,8 +122,34 @@ export class MockAIProvider implements AIProvider {
     return 'بر اساس بررسی عملکرد معاملاتی شما، روند کلی مثبت است. پیشنهاد می‌شود برای حفظ پایداری حساب، بر روی ستاپ‌های با نسبت ریسک به ریوارد حداقل ۱ به ۲ تمرکز کرده و از معاملات هیجانی در زمان انتشار اخبار پرنوسان پرهیز نمایید.';
   }
 
-  private generateMockStructuredResponse<T>(schema?: AISchemaDefinition): T {
+  private generateMockStructuredResponse<T>(schema?: AISchemaDefinition, prompt?: string): T {
     if (!schema) {
+      const isPeriodic = prompt && (prompt.includes('گزارش') || prompt.includes('دوره') || prompt.includes('هفتگی') || prompt.includes('ماهانه') || prompt.includes('PERIODIC_REPORT'));
+      if (isPeriodic) {
+        return {
+          title: 'گزارش تحلیلی دوره',
+          period: 'دوره انتخابی',
+          sampleSize: 10,
+          summary: 'خلاصه عملکرد دوره بر اساس آمار قطعی ثبت‌شده.',
+          keyMetrics: { totalTrades: 10, winRate: 60, netPnl: 350 },
+          performanceInterpretation: 'عملکرد این دوره بر مبنای داده‌های موجود ارزیابی شده است.',
+          strongBehaviors: ['ورود با تاییدیه ستاپ'],
+          biggestProblems: ['خروج زودهنگام از معاملات'],
+          strategyAnalysis: ['استراتژی بریک‌اوت بازدهی مناسبی داشته است.'],
+          psychologyAnalysis: ['انضباط و خونسردی در مدیریت معاملات مشاهده می‌شود.'],
+          riskManagementAnalysis: ['ریسک در محدوده مجاز کنترل شده است.'],
+          repeatedMistakes: ['بستن دستی قبل از تارگت'],
+          topPriorities: [
+            'تمرکز کامل بر روی ستاپ‌های اختصاصی',
+            'حذف معاملات انتقامی پس از استاپ',
+            'تکمیل منظم ژورنال پس از هر معامله',
+          ],
+          observations: ['بیشترین بازدهی در سشن اصلی بوده است.'],
+          recommendations: ['رعایت حد ضرر روزانه', 'ثبت دقیق بازبینی'],
+          limitations: ['حجم نمونه برای نتیجه‌گیری آماری بلندمدت اندک است.'],
+        } as unknown as T;
+      }
+
       return {
         summary: 'خلاصه تحلیل هوشمند: عملکرد کلی مطلوب و منطبق بر مدیریت ریسک است.',
         whatWentWell: ['ورود با تاییدیه', 'پایبندی به حد ضرر'],
@@ -187,17 +213,25 @@ export class MockAIProvider implements AIProvider {
               explanation: 'معامله با رعایت کامل چک‌لیست و قوانین استراتژی انجام شده است.',
             };
           } else if (key === 'riskManagementAnalysis') {
-            result[key] = {
-              plannedRisk: '1.0%',
-              actualRisk: '0.8%',
-              riskRewardRatio: '1:2',
-              assessment: 'مدیریت ریسک در این پوزیشن در محدوده ایمن و استاندارد پلن معاملاتی قرار داشته است.',
-            };
+            if (prop.type === 'array') {
+              result[key] = ['ریسک کنترل‌شده و در محدوده استاندارد حفظ شده است.'];
+            } else {
+              result[key] = {
+                plannedRisk: '1.0%',
+                actualRisk: '0.8%',
+                riskRewardRatio: '1:2',
+                assessment: 'مدیریت ریسک در این پوزیشن در محدوده ایمن و استاندارد پلن معاملاتی قرار داشته است.',
+              };
+            }
           } else if (key === 'psychologyAnalysis') {
-            result[key] = {
-              observedEmotions: ['آرام', 'مطمئن'],
-              assessment: 'ثبت منظم هیجانات نشان‌دهنده آرامش و انضباط فکری در زمان ورود و مدیریت این پوزیشن است.',
-            };
+            if (prop.type === 'array') {
+              result[key] = ['انضباط و خونسردی در مدیریت معاملات مشاهده می‌شود.'];
+            } else {
+              result[key] = {
+                observedEmotions: ['آرام', 'مطمئن'],
+                assessment: 'ثبت منظم هیجانات نشان‌دهنده آرامش و انضباط فکری در زمان ورود و مدیریت این پوزیشن است.',
+              };
+            }
           } else if (key === 'facts') {
             result[key] = [
               'نماد و جهت معامله طبق داده‌های برخط صرافی/بروکر ثبت گردیده است.',
