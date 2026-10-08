@@ -5,8 +5,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { getTradeWithJournal, upsertTradeJournal } from '../../services/tradeJournals';
 import { getStrategies } from '../../services/strategies';
 import { getSetups } from '../../services/setups';
-import { getTags, setTradeTags } from '../../services/tags';
-import { getMistakes, setTradeMistakes } from '../../services/mistakes';
+import { getTags, setTradeTags, createTag } from '../../services/tags';
+import { getMistakes, setTradeMistakes, createMistake } from '../../services/mistakes';
 import { getTradeImages, deleteTradeImage } from '../../services/tradeImages';
 import type { TradeWithJournal, TradeImage, Strategy, Setup, Tag, Mistake, TradeJournalUpdate, RuleAdherence, JournalStatus } from '../../types/database';
 import { RULE_ADHERENCE_OPTIONS, EMOTIONS, DEFAULT_CHECKLIST } from '../../types/database';
@@ -22,6 +22,9 @@ import { formatCurrency, formatDateTime, formatDuration, getJournalStatusLabel, 
 import { VoiceInput } from '../../components/journal/VoiceInput';
 import { TradeImageUpload } from '../../components/trades/TradeImageUpload';
 import { TradeImageViewer } from '../../components/trades/TradeImageViewer';
+import { AITradeReviewModal } from '../../components/ai/AITradeReviewModal';
+import { AIAutoTagModal } from '../../components/ai/AIAutoTagModal';
+import { Sparkles, Tag as TagIcon } from 'lucide-react';
 import {
   TIMEFRAME_OPTIONS,
   COMMON_TIMEFRAME_PRESETS,
@@ -62,6 +65,10 @@ export default function TradeDetailPage() {
 
   // Screenshots state
   const [images, setImages] = useState<TradeImage[]>([]);
+
+  // Phase 14 AI Modals state
+  const [isAIReviewOpen, setIsAIReviewOpen] = useState(false);
+  const [isAIAutoTagOpen, setIsAIAutoTagOpen] = useState(false);
 
   const fetchTrade = useCallback(async () => {
     if (!user || !tradeId) return;
@@ -212,6 +219,75 @@ export default function TradeDetailPage() {
     }
   };
 
+  const handleApplyAISuggestions = async (selected: {
+    strategyId?: string;
+    setupId?: string;
+    tagIds: string[];
+    mistakeIds: string[];
+    newTagsToCreate?: string[];
+    newMistakesToCreate?: string[];
+  }) => {
+    if (!user || !trade) return;
+
+    try {
+      // 1. Create any proposed new tags
+      let finalTagIds = [...selected.tagIds];
+      if (selected.newTagsToCreate && selected.newTagsToCreate.length > 0) {
+        for (const tagName of selected.newTagsToCreate) {
+          const created = await createTag({ user_id: user.id, name: tagName, color: '#3B82F6' });
+          finalTagIds.push(created.id);
+        }
+      }
+
+      // 2. Create any proposed new mistakes
+      let finalMistakeIds = [...selected.mistakeIds];
+      if (selected.newMistakesToCreate && selected.newMistakesToCreate.length > 0) {
+        for (const mistakeName of selected.newMistakesToCreate) {
+          const created = await createMistake({ user_id: user.id, name: mistakeName, description: null, is_active: true });
+          finalMistakeIds.push(created.id);
+        }
+      }
+
+      // Combine unique IDs
+      const mergedTagIds = Array.from(new Set([...selectedTags, ...finalTagIds]));
+      setSelectedTags(mergedTagIds);
+
+      const existingMistakeIdSet = new Set(selectedMistakes.map(m => m.id));
+      const mergedMistakes = [...selectedMistakes];
+      finalMistakeIds.forEach(id => {
+        if (!existingMistakeIdSet.has(id)) {
+          mergedMistakes.push({ id });
+        }
+      });
+      setSelectedMistakes(mergedMistakes);
+
+      // Apply strategy and setup if selected
+      const updatedJournalFields: Partial<TradeJournalUpdate> = {};
+      if (selected.strategyId) updatedJournalFields.strategy_id = selected.strategyId;
+      if (selected.setupId) updatedJournalFields.setup_id = selected.setupId;
+
+      if (Object.keys(updatedJournalFields).length > 0) {
+        setJournalData(prev => ({ ...prev, ...updatedJournalFields }));
+        await upsertTradeJournal(trade.id, user.id, {
+          ...journalData,
+          ...updatedJournalFields,
+        });
+      }
+
+      // Persist relations explicitly confirmed by user
+      await Promise.all([
+        setTradeTags(trade.id, mergedTagIds, user.id),
+        setTradeMistakes(trade.id, mergedMistakes, user.id),
+      ]);
+
+      await fetchTrade();
+      await fetchReferenceData();
+      toast.success('برچسب‌ها و ستاپ‌های پیشنهادی هوش مصنوعی با موفقیت اعمال شدند');
+    } catch (err: any) {
+      toast.error(err?.message || 'خطا در اعمال پیشنهادات هوشمند');
+    }
+  };
+
   const updateField = (field: string, value: any) => {
     setJournalData(prev => ({ ...prev, [field]: value }));
   };
@@ -259,9 +335,29 @@ export default function TradeDetailPage() {
             {formatDateTime(trade.entry_datetime)} • حجم: {trade.volume}
           </p>
         </div>
-        <Button onClick={handleSaveJournal} loading={saving}>
-          ذخیره ژورنال
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setIsAIAutoTagOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+          >
+            <TagIcon className="w-3.5 h-3.5" />
+            <span>پیشنهاد تگ (AI)</span>
+          </Button>
+
+          <Button
+            variant="secondary"
+            onClick={() => setIsAIReviewOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>بررسی هوشمند (AI Review)</span>
+          </Button>
+
+          <Button onClick={handleSaveJournal} loading={saving}>
+            ذخیره ژورنال
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -858,6 +954,30 @@ export default function TradeDetailPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Phase 14 AI Modals */}
+      {trade && (
+        <>
+          <AITradeReviewModal
+            isOpen={isAIReviewOpen}
+            onClose={() => setIsAIReviewOpen(false)}
+            tradeId={trade.id}
+            isGuest={user?.id === 'guest-demo-user'}
+          />
+
+          <AIAutoTagModal
+            isOpen={isAIAutoTagOpen}
+            onClose={() => setIsAIAutoTagOpen(false)}
+            tradeId={trade.id}
+            isGuest={user?.id === 'guest-demo-user'}
+            existingStrategies={strategies}
+            existingSetups={setups}
+            existingTags={tags}
+            existingMistakes={mistakes}
+            onApplySuggestions={handleApplyAISuggestions}
+          />
+        </>
       )}
     </div>
   );

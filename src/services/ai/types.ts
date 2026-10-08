@@ -178,11 +178,38 @@ export interface AIQueryResponse {
 }
 
 export interface AITradeReviewResponse {
+  summary?: string;
+  whatWentWell?: string[];
+  whatCouldBeImproved?: string[];
+  ruleAdherenceAnalysis?: {
+    status: 'followed' | 'partially_followed' | 'violated' | 'not_set';
+    explanation: string;
+  };
+  riskManagementAnalysis?: {
+    plannedRisk?: string | null;
+    actualRisk?: string | null;
+    riskRewardRatio?: string | null;
+    assessment: string;
+  };
+  psychologyAnalysis?: {
+    observedEmotions: string[];
+    assessment: string;
+  };
+  actionableLessons: string[]; // maximum 3 actionable lessons
   facts: string[];
   observations: string[];
   possiblePatterns: string[];
   questionsForTrader: string[];
   limitations: string[];
+}
+
+export interface AIAutoTagItem {
+  type: 'strategy' | 'setup' | 'tag' | 'mistake' | 'emotion' | 'ruleAdherence';
+  id?: string;
+  name: string;
+  isExisting: boolean;
+  reason: string;
+  confidence?: number;
 }
 
 export interface AIAutoTagResponse {
@@ -191,7 +218,23 @@ export interface AIAutoTagResponse {
     tagName: string;
     reason: string;
     confidence?: number;
+    type?: 'strategy' | 'setup' | 'tag' | 'mistake' | 'emotion' | 'ruleAdherence';
+    isExisting?: boolean;
+    name?: string;
   }>;
+  structuredSuggestions?: AIAutoTagItem[];
+}
+
+export interface PeriodComparison {
+  metric: string;
+  currentValue: number | string | null;
+  previousValue: number | string | null;
+  change: number | string | null;
+  interpretation: string;
+  sampleSize: {
+    current: number;
+    previous: number;
+  };
 }
 
 export interface AIReportResponse {
@@ -200,6 +243,32 @@ export interface AIReportResponse {
   sampleSize: number;
   summary: string;
   keyMetrics: Record<string, any>;
+  performanceInterpretation?: string;
+  strongBehaviors?: string[];
+  biggestProblems?: string[];
+  strategyAnalysis?: string[];
+  psychologyAnalysis?: string[];
+  riskManagementAnalysis?: string[];
+  repeatedMistakes?: string[];
+  bestConditions?: {
+    symbols?: string[];
+    hours?: string[];
+    days?: string[];
+    setups?: string[];
+  };
+  weakestConditions?: {
+    symbols?: string[];
+    hours?: string[];
+    days?: string[];
+    setups?: string[];
+  };
+  topPriorities?: string[]; // exactly 3 practical priorities
+  comparisonWithPrevious?: PeriodComparison[];
+  trends?: Array<{
+    metric: string;
+    description: string;
+    confidence: string;
+  }>;
   observations: string[];
   recommendations: string[];
   limitations: string[];

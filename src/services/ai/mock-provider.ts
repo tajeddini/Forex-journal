@@ -37,7 +37,7 @@ export class MockAIProvider implements AIProvider {
 
   async generateStructured<T>(
     prompt: string,
-    schema: AISchemaDefinition,
+    schema?: AISchemaDefinition,
     options?: AIGenerateOptions
   ): Promise<AIResponse<T>> {
     await this.simulateDelay();
@@ -122,7 +122,42 @@ export class MockAIProvider implements AIProvider {
     return 'بر اساس بررسی عملکرد معاملاتی شما، روند کلی مثبت است. پیشنهاد می‌شود برای حفظ پایداری حساب، بر روی ستاپ‌های با نسبت ریسک به ریوارد حداقل ۱ به ۲ تمرکز کرده و از معاملات هیجانی در زمان انتشار اخبار پرنوسان پرهیز نمایید.';
   }
 
-  private generateMockStructuredResponse<T>(schema: AISchemaDefinition): T {
+  private generateMockStructuredResponse<T>(schema?: AISchemaDefinition): T {
+    if (!schema) {
+      return {
+        summary: 'خلاصه تحلیل هوشمند: عملکرد کلی مطلوب و منطبق بر مدیریت ریسک است.',
+        whatWentWell: ['ورود با تاییدیه', 'پایبندی به حد ضرر'],
+        whatCouldBeImproved: ['خروج زودهنگام قبل از رسیدن به تارگت'],
+        ruleAdherenceAnalysis: { status: 'followed', explanation: 'قوانین رعایت شده است.' },
+        riskManagementAnalysis: { assessment: 'ریسک کنترل‌شده و در محدوده مجاز بوده است.' },
+        psychologyAnalysis: { observedEmotions: ['آرام'], assessment: 'انضباط و خونسردی مطلوب' },
+        actionableLessons: [
+          'پایبندی بدون تغییر به حد ضرر تعیین‌شده',
+          'عدم افزایش حجم پس از معاملات سودده',
+          'مرور ستاپ قبل از ورود به پوزیشن',
+        ],
+        facts: ['نماد و جهت معامله ثبت گردیده است.'],
+        observations: ['بیشترین سودآوری در ساعات میانی ثبت شده است.'],
+        possiblePatterns: ['الگوی پولبک با بالاترین دقت همراه بوده است.'],
+        questionsForTrader: ['آیا استاپ‌لاس در حین معامله جابجا شد؟'],
+        limitations: ['حجم نمونه برای نتیجه‌گیری آماری بلندمدت اندک است.'],
+        suggestions: [
+          { tagName: 'ستاپ تایید شده', reason: 'معیارهای ورود رعایت شده است.', confidence: 90, type: 'tag', isExisting: true },
+          { tagName: 'مدیریت ریسک هوشمند', reason: 'ریسک مجاز بوده است.', confidence: 85, type: 'tag', isExisting: true },
+        ],
+        title: 'گزارش تحلیلی دوره',
+        period: 'دوره انتخابی',
+        sampleSize: 10,
+        keyMetrics: { totalTrades: 10, winRate: 60, netPnl: 350 },
+        recommendations: ['رعایت حد ضرر روزانه', 'ثبت دقیق بازبینی'],
+        topPriorities: [
+          'تمرکز کامل بر روی ستاپ‌های اختصاصی',
+          'حذف معاملات انتقامی پس از استاپ',
+          'تکمیل منظم ژورنال پس از هر معامله',
+        ],
+      } as unknown as T;
+    }
+
     // Generate mock data based on schema type
     if (schema.type === 'object') {
       const result: Record<string, any> = {};
@@ -130,7 +165,45 @@ export class MockAIProvider implements AIProvider {
       if (schema.properties) {
         for (const [key, prop] of Object.entries(schema.properties)) {
           // Provide context-aware Persian content for key fields
-          if (key === 'recommendations') {
+          if (key === 'actionableLessons') {
+            result[key] = [
+              'پایبندی بدون چون‌وچرا به حد ضرر تعیین‌شده در ورود معامله',
+              'عدم تغییر تارگت و حجم پوزیشن بر اساس هیجان یا نوسانات میان‌روزی',
+              'انتظار برای تثبیت کامل کندل تاییدیه قبل از فشردن کلید ورود',
+            ];
+          } else if (key === 'whatWentWell') {
+            result[key] = [
+              'تعیین مشخص حد ضرر قبل از ارسال سفارش به بازار',
+              'انتخاب ستاپ معاملاتی هماهنگ با تایم‌فریم اصلی',
+            ];
+          } else if (key === 'whatCouldBeImproved') {
+            result[key] = [
+              'خروج زودهنگام قبل از رسیدن به حد سود تعیین‌شده',
+              'توجه بیشتر به اخبار میان‌روزی و تأثیر آن بر اسپرد معاملاتی',
+            ];
+          } else if (key === 'ruleAdherenceAnalysis') {
+            result[key] = {
+              status: 'followed',
+              explanation: 'معامله با رعایت کامل چک‌لیست و قوانین استراتژی انجام شده است.',
+            };
+          } else if (key === 'riskManagementAnalysis') {
+            result[key] = {
+              plannedRisk: '1.0%',
+              actualRisk: '0.8%',
+              riskRewardRatio: '1:2',
+              assessment: 'مدیریت ریسک در این پوزیشن در محدوده ایمن و استاندارد پلن معاملاتی قرار داشته است.',
+            };
+          } else if (key === 'psychologyAnalysis') {
+            result[key] = {
+              observedEmotions: ['آرام', 'مطمئن'],
+              assessment: 'ثبت منظم هیجانات نشان‌دهنده آرامش و انضباط فکری در زمان ورود و مدیریت این پوزیشن است.',
+            };
+          } else if (key === 'facts') {
+            result[key] = [
+              'نماد و جهت معامله طبق داده‌های برخط صرافی/بروکر ثبت گردیده است.',
+              'حجم معامله و قیمت ورود و خروج کاملاً مطابق با متاتریدر است.',
+            ];
+          } else if (key === 'recommendations') {
             result[key] = [
               'میزان ریسک در هر معامله را حداکثر روی ۱ تا ۱.۵ درصد بالانس حفظ کنید.',
               'بر روی ساعات آغازین سشن لندن و نیویورک تمرکز کنید و از معاملات قبل از اخبار مهم دوری نمایید.',
@@ -148,15 +221,29 @@ export class MockAIProvider implements AIProvider {
                 tagName: 'ستاپ تایید شده',
                 reason: 'تمام معیارهای چک‌لیست استراتژی ورود رعایت شده است.',
                 confidence: 90,
+                type: 'tag',
+                isExisting: true,
               },
               {
                 tagName: 'مدیریت ریسک هوشمند',
                 reason: 'حد ضرر و حد سود طبق استاندارد برنامه معاملاتی تنظیم گردیده است.',
                 confidence: 85,
+                type: 'tag',
+                isExisting: true,
               },
             ];
           } else if (key === 'summary') {
             result[key] = 'خلاصه تحلیل: انضباط معاملاتی مطلوب با نرخ سودآوری پایدار در سشن‌های اصلی.';
+          } else if (key === 'topPriorities') {
+            result[key] = [
+              'اولیت اول: تمرکز کامل بر روی پایبندی به حد ضرر در تمامی نمادها',
+              'اولویت دوم: حذف پوزیشن‌های پرریسک در ساعات پایانی جمعه',
+              'اولویت سوم: یادداشت منظم بازبینی پس از معامله بلافاصله پس از خروج',
+            ];
+          } else if (key === 'limitations') {
+            result[key] = [
+              'تحلیل بر اساس معاملات ثبت‌شده در این بازه انجام شده و نمونه‌های کم‌تعداد الگوهای قطعی ایجاد نمی‌کنند.',
+            ];
           } else {
             result[key] = this.generateMockValue(prop);
           }

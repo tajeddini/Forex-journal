@@ -317,11 +317,12 @@ Tests cover:
 - ✅ **Hardened CORS Policy**: Strict origin validation in production, preventing wildcard access for authenticated endpoints.
 - ✅ **Native Persian RTL UI**: Responsive AI Query UI (`/app/ai`) with voice input, prompt suggestions, mathematical source-of-truth cards, dimensional breakdown visualizers, and query plan transparency.
 
-### Phase 14 (Future)
-- AI Trade Review
-- AI Auto-Tagging
-- AI Weekly/Monthly Reports
-- Pattern Analysis
+### Phase 14 (Completed — Production Ready)
+- ✅ **AI Trade Review**: Individual completed trade analysis using objective broker metrics, journal records, rule adherence, risk:reward ratios, emotions, and max 3 actionable lessons without hallucination.
+- ✅ **AI Auto-Tagging**: Evidence-based suggestions for strategies, setups, tags, and mistakes with clear distinction between existing items and new proposals. Enforces mandatory user confirmation with zero autonomous database mutations.
+- ✅ **AI Weekly/Monthly Reports**: Periodic review generator calculating deterministic statistics first, performing multi-period comparisons (trades, win rate, net PnL, profit factor), detecting trends, and deriving 3 strategic priorities.
+- ✅ **Direct Review Persistence**: User-approved periodic reports save directly to the existing `trading_reviews` table.
+- ✅ **Security & Isolation**: Authenticated server proxy execution (`/api/ai/query`), strict ownership validation, prompt-injection defense, untrusted text sanitization, and isolated user scopes.
 
 ### Phase 15 (Future)
 - AI Chart Generation

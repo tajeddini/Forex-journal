@@ -4,7 +4,12 @@
 // Tightened CORS security and BYOK provider config support
 // ============================================================
 
-import { executeServerAIQuery } from '../services/ai/server-orchestrator';
+import {
+  executeServerAIQuery,
+  executeServerTradeReview,
+  executeServerAutoTagging,
+  executeServerPeriodicReview,
+} from '../services/ai/server-orchestrator';
 import { AIError } from '../services/ai/types';
 
 function applySecureCors(req: any, res: any): boolean {
@@ -79,22 +84,59 @@ export async function handleAIQueryRequest(req: any, res: any) {
     }
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { question, accountId, phaseId, providerConfig } = body;
+    const { action = 'query', question, tradeId, periodType, startDate, endDate, periodTitle, accountId, phaseId, providerConfig } = body;
 
-    if (!question || typeof question !== 'string' || question.trim().length === 0) {
-      return res.status(400).json({
-        error: 'متن سوال الزامی است.',
-        code: 'QUERY_VALIDATION_FAILED',
+    let result;
+
+    if (action === 'trade-review') {
+      if (!tradeId) {
+        return res.status(400).json({ error: 'شناسه معامله الزامی است', code: 'QUERY_VALIDATION_FAILED' });
+      }
+      result = await executeServerTradeReview({
+        token,
+        tradeId,
+        providerConfig,
+      });
+    } else if (action === 'auto-tag') {
+      if (!tradeId) {
+        return res.status(400).json({ error: 'شناسه معامله الزامی است', code: 'QUERY_VALIDATION_FAILED' });
+      }
+      result = await executeServerAutoTagging({
+        token,
+        tradeId,
+        providerConfig,
+      });
+    } else if (action === 'periodic-review') {
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'بازه زمانی برای گزارش الزامی است', code: 'QUERY_VALIDATION_FAILED' });
+      }
+      result = await executeServerPeriodicReview({
+        token,
+        periodType: periodType === 'monthly' ? 'monthly' : 'weekly',
+        startDate,
+        endDate,
+        periodTitle,
+        accountId: accountId || undefined,
+        phaseId: phaseId || undefined,
+        providerConfig,
+      });
+    } else {
+      // Default: analytical query
+      if (!question || typeof question !== 'string' || question.trim().length === 0) {
+        return res.status(400).json({
+          error: 'متن سوال الزامی است.',
+          code: 'QUERY_VALIDATION_FAILED',
+        });
+      }
+
+      result = await executeServerAIQuery({
+        token,
+        question: question.trim(),
+        accountId: accountId || undefined,
+        phaseId: phaseId || undefined,
+        providerConfig: providerConfig || undefined,
       });
     }
-
-    const result = await executeServerAIQuery({
-      token,
-      question: question.trim(),
-      accountId: accountId || undefined,
-      phaseId: phaseId || undefined,
-      providerConfig: providerConfig || undefined,
-    });
 
     return res.status(200).json(result);
   } catch (err: unknown) {

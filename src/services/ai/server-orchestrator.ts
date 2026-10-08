@@ -20,7 +20,16 @@ import {
 } from '../analytics/aggregation';
 import { analyzeByRuleAdherence } from '../analytics/psychologyAnalytics';
 import { getAIProviderRegistry, createAIProviderInstance } from './provider-registry';
-import type { Trade, TradingAccount, AccountPhase, TradeJournal } from '../../types/database';
+import type {
+  Trade,
+  TradingAccount,
+  AccountPhase,
+  TradeJournal,
+  Strategy,
+  Setup,
+  Tag,
+  Mistake,
+} from '../../types/database';
 
 export interface AIQueryExecutionRequest {
   token: string;
@@ -253,6 +262,7 @@ export async function executeServerAIQuery(
       type: providerConfig.provider,
       apiKey: providerConfig.apiKey,
       model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
     });
 
     if (provider.type !== 'mock' && !provider.isAvailable()) {
@@ -507,4 +517,244 @@ ${factualDetails}
     limitations: limitations.length > 0 ? limitations : undefined,
     confidenceNote,
   };
+}
+
+/**
+ * Server execution for Phase 14 Individual Trade Review
+ */
+export async function executeServerTradeReview(request: {
+  token: string;
+  tradeId: string;
+  providerConfig?: {
+    provider?: AIProviderType;
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
+}) {
+  const { token, tradeId, providerConfig } = request;
+  if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
+  if (!tradeId) throw new AIError('شناسه معامله الزامی است', 'QUERY_VALIDATION_FAILED');
+
+  const supabase = createAuthenticatedSupabaseClient(token);
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    throw new AIError('احراز هویت کاربر ناموفق بود', 'PERMISSION_DENIED');
+  }
+  const userId = authData.user.id;
+
+  // Retrieve trade strictly owned by user
+  const { data: trade, error: tradeError } = await supabase
+    .from('trades')
+    .select('*')
+    .eq('id', tradeId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (tradeError || !trade) {
+    throw new AIError('معامله مورد نظر یافت نشد یا متعلق به شما نیست', 'PERMISSION_DENIED');
+  }
+
+  // Retrieve associated journal, strategy, setup, mistakes
+  const [journalRes, stratsRes, setupsRes, mistakesRes] = await Promise.all([
+    supabase.from('trade_journals').select('*').eq('trade_id', tradeId).eq('user_id', userId).maybeSingle(),
+    supabase.from('strategies').select('*').eq('user_id', userId),
+    supabase.from('setups').select('*').eq('user_id', userId),
+    supabase.from('trade_mistakes').select('mistake:mistakes(*)').eq('trade_id', tradeId),
+  ]);
+
+  const journal = journalRes.data || null;
+  const strategies = (stratsRes.data as Strategy[]) || [];
+  const setups = (setupsRes.data as Setup[]) || [];
+  const strategy = journal?.strategy_id ? strategies.find(s => s.id === journal.strategy_id) || null : null;
+  const setup = journal?.setup_id ? setups.find(s => s.id === journal.setup_id) || null : null;
+  const mistakes = (mistakesRes.data || []).map((m: any) => m.mistake).filter(Boolean);
+
+  // Resolve Provider
+  let provider: AIProvider;
+  if (providerConfig?.provider) {
+    provider = createAIProviderInstance({
+      type: providerConfig.provider,
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
+    });
+    if (provider.type !== 'mock' && !provider.isAvailable()) {
+      throw new AIError(`کلید دسترسی برای ارائه‌دهنده '${provider.name}' نامعتبر یا ثبت نشده است.`, 'API_KEY_MISSING', provider.type);
+    }
+  } else {
+    provider = getAIProviderRegistry().getCurrentProvider();
+  }
+
+  const { executeAITradeReview } = await import('./analytics-service');
+  return executeAITradeReview({
+    trade,
+    journal,
+    strategy,
+    setup,
+    mistakes,
+  }, provider);
+}
+
+/**
+ * Server execution for Phase 14 Trade Auto-Tagging
+ */
+export async function executeServerAutoTagging(request: {
+  token: string;
+  tradeId: string;
+  providerConfig?: {
+    provider?: AIProviderType;
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
+}) {
+  const { token, tradeId, providerConfig } = request;
+  if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
+  if (!tradeId) throw new AIError('شناسه معامله الزامی است', 'QUERY_VALIDATION_FAILED');
+
+  const supabase = createAuthenticatedSupabaseClient(token);
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    throw new AIError('احراز هویت کاربر ناموفق بود', 'PERMISSION_DENIED');
+  }
+  const userId = authData.user.id;
+
+  const { data: trade, error: tradeError } = await supabase
+    .from('trades')
+    .select('*')
+    .eq('id', tradeId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (tradeError || !trade) {
+    throw new AIError('معامله مورد نظر یافت نشد یا متعلق به شما نیست', 'PERMISSION_DENIED');
+  }
+
+  const [journalRes, stratsRes, setupsRes, tagsRes, mistakesRes] = await Promise.all([
+    supabase.from('trade_journals').select('*').eq('trade_id', tradeId).eq('user_id', userId).maybeSingle(),
+    supabase.from('strategies').select('*').eq('user_id', userId),
+    supabase.from('setups').select('*').eq('user_id', userId),
+    supabase.from('tags').select('*').eq('user_id', userId),
+    supabase.from('mistakes').select('*').eq('user_id', userId),
+  ]);
+
+  let provider: AIProvider;
+  if (providerConfig?.provider) {
+    provider = createAIProviderInstance({
+      type: providerConfig.provider,
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
+    });
+    if (provider.type !== 'mock' && !provider.isAvailable()) {
+      throw new AIError(`کلید دسترسی برای ارائه‌دهنده '${provider.name}' نامعتبر یا ثبت نشده است.`, 'API_KEY_MISSING', provider.type);
+    }
+  } else {
+    provider = getAIProviderRegistry().getCurrentProvider();
+  }
+
+  const { executeAIAutoTagging } = await import('./analytics-service');
+  return executeAIAutoTagging({
+    trade,
+    journal: journalRes.data || null,
+    strategies: (stratsRes.data as Strategy[]) || [],
+    setups: (setupsRes.data as Setup[]) || [],
+    tags: (tagsRes.data as Tag[]) || [],
+    mistakes: (mistakesRes.data as Mistake[]) || [],
+  }, provider);
+}
+
+/**
+ * Server execution for Phase 14 Periodic Review (Weekly/Monthly)
+ */
+export async function executeServerPeriodicReview(request: {
+  token: string;
+  periodType: 'weekly' | 'monthly';
+  startDate: string;
+  endDate: string;
+  periodTitle?: string;
+  accountId?: string;
+  phaseId?: string;
+  providerConfig?: {
+    provider?: AIProviderType;
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
+}) {
+  const { token, periodType, startDate, endDate, periodTitle, accountId, phaseId, providerConfig } = request;
+  if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
+  if (!startDate || !endDate) throw new AIError('بازه زمانی الزامی است', 'QUERY_VALIDATION_FAILED');
+
+  const supabase = createAuthenticatedSupabaseClient(token);
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    throw new AIError('احراز هویت کاربر ناموفق بود', 'PERMISSION_DENIED');
+  }
+  const userId = authData.user.id;
+
+  // Build current period query
+  let currentQuery = supabase
+    .from('trades')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('entry_datetime', startDate)
+    .lte('entry_datetime', endDate);
+
+  if (accountId) currentQuery = currentQuery.eq('account_id', accountId);
+  if (phaseId) currentQuery = currentQuery.eq('phase_id', phaseId);
+
+  // Compute previous period dates for comparison
+  const curStart = new Date(startDate);
+  const curEnd = new Date(endDate);
+  const durationMs = curEnd.getTime() - curStart.getTime();
+  const prevEnd = new Date(curStart.getTime() - 1000);
+  const prevStart = new Date(prevEnd.getTime() - durationMs);
+
+  let prevQuery = supabase
+    .from('trades')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('entry_datetime', prevStart.toISOString())
+    .lte('entry_datetime', prevEnd.toISOString());
+
+  if (accountId) prevQuery = prevQuery.eq('account_id', accountId);
+  if (phaseId) prevQuery = prevQuery.eq('phase_id', phaseId);
+
+  const [currentRes, prevRes, journalsRes] = await Promise.all([
+    currentQuery,
+    prevQuery,
+    supabase.from('trade_journals').select('*').eq('user_id', userId),
+  ]);
+
+  const currentTrades = (currentRes.data as Trade[]) || [];
+  const previousTrades = (prevRes.data as Trade[]) || [];
+  const currentJournals = (journalsRes.data as TradeJournal[]) || [];
+
+  let provider: AIProvider;
+  if (providerConfig?.provider) {
+    provider = createAIProviderInstance({
+      type: providerConfig.provider,
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
+    });
+    if (provider.type !== 'mock' && !provider.isAvailable()) {
+      throw new AIError(`کلید دسترسی برای ارائه‌دهنده '${provider.name}' نامعتبر یا ثبت نشده است.`, 'API_KEY_MISSING', provider.type);
+    }
+  } else {
+    provider = getAIProviderRegistry().getCurrentProvider();
+  }
+
+  const { executeAIPeriodicReport } = await import('./analytics-service');
+  return executeAIPeriodicReport({
+    periodType,
+    periodTitle: periodTitle || `${periodType === 'weekly' ? 'هفته' : 'ماه'} انتخابی`,
+    startDate,
+    endDate,
+    currentTrades,
+    currentJournals,
+    previousTrades,
+  }, provider);
 }

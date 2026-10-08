@@ -21,6 +21,9 @@ import { Loading } from '../../components/ui/Loading';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { formatCurrency, formatDuration, formatDate } from '../../utils/format';
 import { VoiceInput } from '../../components/journal/VoiceInput';
+import { AIPeriodicReviewModal } from '../../components/ai/AIPeriodicReviewModal';
+import type { AIReportResponse } from '../../services/ai/types';
+import { Sparkles } from 'lucide-react';
 
 export default function ReviewsPage() {
   const { user } = useAuth();
@@ -36,6 +39,10 @@ export default function ReviewsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReview, setEditingReview] = useState<TradingReview | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Phase 14 AI Periodic Review Modal state
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiPeriodType, setAiPeriodType] = useState<'weekly' | 'monthly'>('weekly');
   
   // Delete confirmation
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; reviewId: string | null }>({
@@ -210,7 +217,33 @@ export default function ReviewsPage() {
             بازبینی روزانه، هفتگی و ماهانه عملکرد
           </p>
         </div>
-        <Button onClick={openCreateModal}>+ بازبینی جدید</Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setAiPeriodType('weekly');
+              setIsAIModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>گزارش هفتگی هوشمند (AI)</span>
+          </Button>
+
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setAiPeriodType('monthly');
+              setIsAIModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>گزارش ماهانه هوشمند (AI)</span>
+          </Button>
+
+          <Button onClick={openCreateModal}>+ بازبینی جدید</Button>
+        </div>
       </div>
 
       {/* Filter */}
@@ -416,6 +449,68 @@ export default function ReviewsPage() {
         confirmLabel="حذف"
         variant="danger"
       />
+
+      {/* Phase 14 AI Periodic Review Modal */}
+      {user && (
+        <AIPeriodicReviewModal
+          isOpen={isAIModalOpen}
+          onClose={() => setIsAIModalOpen(false)}
+          periodType={aiPeriodType}
+          startDate={getZonedDateStr(
+            getReviewPeriod(aiPeriodType, new Date(), userTimezone).start,
+            userTimezone
+          )}
+          endDate={getZonedDateStr(
+            getReviewPeriod(aiPeriodType, new Date(), userTimezone).end,
+            userTimezone
+          )}
+          periodTitle={aiPeriodType === 'weekly' ? 'هفته جاری' : 'ماه جاری'}
+          isGuest={user.id === 'guest-demo-user'}
+          onSaveToTradingReviews={async (aiReport) => {
+            const period = getReviewPeriod(aiPeriodType, new Date(), userTimezone);
+            const periodStart = getZonedDateStr(period.start, userTimezone);
+            const periodEnd = getZonedDateStr(period.end, userTimezone);
+
+            const stats = await computeReviewStats(
+              user.id,
+              period.start,
+              period.end,
+              null,
+              null
+            );
+
+            await createReview({
+              user_id: user.id,
+              review_type: aiPeriodType,
+              review_date: getZonedDateStr(new Date(), userTimezone),
+              period_start: periodStart,
+              period_end: periodEnd,
+              account_id: null,
+              phase_id: null,
+              total_trades: stats.total_trades,
+              net_pnl: stats.net_pnl,
+              win_rate: stats.win_rate,
+              profit_factor: stats.profit_factor,
+              expectancy: stats.expectancy,
+              max_drawdown: null,
+              avg_duration: stats.avg_duration,
+              summary: aiReport.summary || null,
+              what_went_well: aiReport.strongBehaviors?.join('\n• ') || null,
+              what_went_wrong: aiReport.biggestProblems?.join('\n• ') || null,
+              main_lesson: aiReport.topPriorities?.[0] || null,
+              main_mistake: aiReport.repeatedMistakes?.[0] || null,
+              psychology_notes: aiReport.psychologyAnalysis?.join('\n') || null,
+              rule_adherence_notes: aiReport.riskManagementAnalysis?.join('\n') || null,
+              improvement_plan: aiReport.topPriorities?.join('\n') || null,
+              next_period_plan: aiReport.recommendations?.join('\n') || null,
+            });
+
+            const updatedReviews = await getReviews(user.id, filterType === 'all' ? undefined : filterType);
+            setReviews(updatedReviews);
+            toast.success('گزارش هوشمند با موفقیت در بازبینی‌های معاملاتی ذخیره گردید');
+          }}
+        />
+      )}
     </div>
   );
 }
