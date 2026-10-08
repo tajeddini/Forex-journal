@@ -90,6 +90,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -156,6 +157,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
