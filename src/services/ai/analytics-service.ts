@@ -22,6 +22,7 @@ import { classifyTrades, calculateCoreMetrics } from '../analytics/metrics';
 import { analyzeByHour, analyzeByDay } from '../analytics/timeAnalytics';
 import { analyzeByRuleAdherence } from '../analytics/psychologyAnalytics';
 import { calculateDurationMetrics } from '../analytics/aggregation';
+import { validateTradeReviewResponse, validateAutoTagResponse, validatePeriodicReportResponse } from './response-validation';
 
 export interface TradeAnalysisContextData {
   trade: Trade;
@@ -423,11 +424,12 @@ export async function executeAITradeReview(
 ): Promise<AITradeReviewResponse> {
   const prompt = buildTradeReviewPrompt(ctx);
   const response = await provider.generateStructured<AITradeReviewResponse>(prompt);
+  const validated = validateTradeReviewResponse(response.data);
 
   const deterministic = buildDeterministicTradeSummary(ctx);
 
   // Merge and guarantee deterministic safety
-  const data = response.data || {};
+  const data = validated;
   return {
     summary: data.summary || `بررسی معامله ${ctx.trade.symbol} با سود خالص ${ctx.trade.profit}$`,
     whatWentWell: Array.isArray(data.whatWentWell) ? data.whatWentWell : ['ورود با حد ضرر معین'],
@@ -468,8 +470,9 @@ export async function executeAIAutoTagging(
 ): Promise<AIAutoTagResponse> {
   const prompt = buildAutoTagPrompt(ctx);
   const response = await provider.generateStructured<AIAutoTagResponse>(prompt);
+  const validated = validateAutoTagResponse(response.data);
 
-  const raw = response.data || { suggestions: [] };
+  const raw = validated || { suggestions: [] };
   const suggestions = Array.isArray(raw.suggestions) ? raw.suggestions : [];
 
   // Match suggestions against existing items to strictly ensure isExisting flag
@@ -575,7 +578,7 @@ export async function executeAIPeriodicReport(
 
   const prompt = buildPeriodicReportPrompt(ctx);
   const response = await provider.generateStructured<AIReportResponse>(prompt);
-  const data = response.data || {};
+  const data = validatePeriodicReportResponse(response.data);
 
   return {
     title: data.title || `گزارش تحلیلی ${ctx.periodType === 'weekly' ? 'هفتگی' : 'ماهانه'} (${ctx.periodTitle})`,
