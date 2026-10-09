@@ -792,9 +792,10 @@ export async function executeServerPatternInsights(request: {
   }
   const userId = authData.user.id;
 
-  let patternResult = detectionResult;
-
-  if (!patternResult) {
+  // Never trust client-supplied detectionResult: it can be forged. Recompute from
+  // authenticated user's database rows on the server for every AI insight request.
+  let patternResult;
+  {
     let query = supabase.from('trades').select('*').eq('user_id', userId);
     if (accountId) query = query.eq('account_id', accountId);
     if (phaseId) query = query.eq('phase_id', phaseId);
