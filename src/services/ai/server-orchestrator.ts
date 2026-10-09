@@ -769,7 +769,6 @@ export async function executeServerPeriodicReview(request: {
  */
 export async function executeServerPatternInsights(request: {
   token: string;
-  detectionResult?: any;
   periodLabel?: string;
   accountName?: string;
   phaseName?: string;
@@ -782,7 +781,7 @@ export async function executeServerPatternInsights(request: {
     baseUrl?: string;
   };
 }) {
-  const { token, detectionResult, periodLabel, accountName, phaseName, accountId, phaseId, providerConfig } = request;
+  const { token, periodLabel, accountName, phaseName, accountId, phaseId, providerConfig } = request;
   if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
 
   const supabase = createAuthenticatedSupabaseClient(token);
@@ -792,9 +791,10 @@ export async function executeServerPatternInsights(request: {
   }
   const userId = authData.user.id;
 
-  let patternResult = detectionResult;
-
-  if (!patternResult) {
+  // Never trust client-supplied detectionResult: it can be forged. Recompute from
+  // authenticated user's database rows on the server for every AI insight request.
+  let patternResult: import('../analytics/patterns').PatternDetectionResult;
+  {
     let query = supabase.from('trades').select('*').eq('user_id', userId);
     if (accountId) query = query.eq('account_id', accountId);
     if (phaseId) query = query.eq('phase_id', phaseId);

@@ -196,6 +196,8 @@ export default function PatternsPage() {
         detectionResult,
         accountName: selectedAccount?.name,
         phaseName: selectedPhase?.name,
+        accountId: selectedAccountId || undefined,
+        phaseId: selectedPhaseId || undefined,
         periodLabel: dateLabel,
         isGuest,
       });

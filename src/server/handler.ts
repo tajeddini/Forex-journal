@@ -122,10 +122,9 @@ export async function handleAIQueryRequest(req: any, res: any) {
         providerConfig,
       });
     } else if (action === 'pattern-insights') {
-      const { detectionResult, periodLabel, accountName, phaseName } = body;
+      const { periodLabel, accountName, phaseName } = body;
       result = await executeServerPatternInsights({
         token,
-        detectionResult,
         periodLabel,
         accountName,
         phaseName,
