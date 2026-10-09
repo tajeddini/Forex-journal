@@ -1,5 +1,5 @@
 // Strict validation for structured Phase 14 AI responses.
-import { AIError, type AITradeReviewResponse, type AIAutoTagResponse, type AIReportResponse } from './types';
+import { AIError, type AITradeReviewResponse, type AIAutoTagResponse, type AIReportResponse, type AIPatternInsightsResponse } from './types';
 
 const MAX_STRING = 4000;
 const MAX_LIST = 50;
@@ -36,7 +36,19 @@ export function validatePeriodicReportResponse(value: unknown): AIReportResponse
  if (!isStringArray(value.observations) || !isStringArray(value.recommendations) || !isStringArray(value.limitations)) throw new AIError('آرایه‌های اصلی گزارش دوره‌ای معتبر نیستند.', 'INVALID_RESPONSE');
  if (value.topPriorities !== undefined && (!isStringArray(value.topPriorities, 3) || value.topPriorities.length !== 3)) throw new AIError('گزارش دوره‌ای باید دقیقاً ۳ اولویت راهبردی داشته باشد.', 'INVALID_RESPONSE');
  for (const key of ['strongBehaviors','biggestProblems','strategyAnalysis','psychologyAnalysis','riskManagementAnalysis','repeatedMistakes']) if (value[key] !== undefined && !isStringArray(value[key])) throw new AIError('فیلد ' + key + ' در گزارش دوره‌ای معتبر نیست.', 'INVALID_RESPONSE');
- if (!Number.isInteger(value.sampleSize) || value.sampleSize < 0) throw new AIError('sampleSize در گزارش دوره‌ای معتبر نیست.', 'INVALID_RESPONSE');
+ if (typeof value.sampleSize !== 'number' || !Number.isInteger(value.sampleSize) || value.sampleSize < 0) throw new AIError('sampleSize در گزارش دوره‌ای معتبر نیست.', 'INVALID_RESPONSE');
  if (!value.keyMetrics || typeof value.keyMetrics !== 'object' || Array.isArray(value.keyMetrics)) throw new AIError('keyMetrics در گزارش دوره‌ای معتبر نیست.', 'INVALID_RESPONSE');
  return value as unknown as AIReportResponse;
+}
+
+export function validatePatternInsightsResponse(value: unknown): AIPatternInsightsResponse {
+ assertObject(value, 'Pattern Insights');
+ if (!isString(value.summary)) throw new AIError('فیلد summary در بینش الگوها معتبر نیست.', 'INVALID_RESPONSE');
+ for (const key of ['confirmedEdges', 'performanceLeaks', 'behavioralTendencies', 'limitations']) {
+   if (!isStringArray(value[key])) throw new AIError('فیلد ' + key + ' در بینش الگوها معتبر نیست.', 'INVALID_RESPONSE');
+ }
+ if (!isStringArray(value.actionablePriorities, 5)) {
+   throw new AIError('فیلد actionablePriorities در بینش الگوها معتبر نیست.', 'INVALID_RESPONSE');
+ }
+ return value as unknown as AIPatternInsightsResponse;
 }

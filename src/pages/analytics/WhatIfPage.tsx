@@ -3,6 +3,7 @@
 // ============================================================
 
 import { useEffect, useState, useMemo } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchAnalyticsTrades } from '../../services/analytics';
 import { classifyTrades } from '../../services/analytics/metrics';
@@ -112,11 +113,54 @@ export default function WhatIfPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">تحلیل What-If</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          شبیه‌سازی سناریوهای فرضی بدون تغییر داده‌های واقعی
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">تحلیل What-If</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            شبیه‌سازی سناریوهای فرضی بدون تغییر داده‌های واقعی
+          </p>
+        </div>
+
+        {/* Sub-nav switcher */}
+        <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+          <NavLink
+            to="/app/analytics"
+            end
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`
+            }
+          >
+            آنالیتیکس کلی
+          </NavLink>
+          <NavLink
+            to="/app/analytics/patterns"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`
+            }
+          >
+            الگوها و بینش‌ها
+          </NavLink>
+          <NavLink
+            to="/app/analytics/what-if"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`
+            }
+          >
+            شبیه‌ساز فرضی (What-If)
+          </NavLink>
+        </div>
       </div>
 
       {/* Account Filter */}

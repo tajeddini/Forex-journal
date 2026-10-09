@@ -124,6 +124,34 @@ export class MockAIProvider implements AIProvider {
 
   private generateMockStructuredResponse<T>(schema?: AISchemaDefinition, prompt?: string): T {
     if (!schema) {
+      const isPatternInsights = prompt && (prompt.includes('PATTERN_INSIGHTS') || prompt.includes('confirmedEdges') || prompt.includes('تحلیل‌گر ارشد ژورنال معاملاتی فارکس'));
+      if (isPatternInsights) {
+        return {
+          summary: 'بررسی آماری الگوها نشان می‌دهد تمرکز بر ستاپ‌های روند و سشن لندن قوی‌ترین مزیت معاملاتی شما را شکل داده است.',
+          confirmedEdges: [
+            'ستاپ‌های هم‌جهت با روند با نرخ برد بالاتر از ۷۵٪ و سودآوری پایدار همراه بوده‌اند.',
+            'معاملات اجرا شده در سشن لندن بالاترین نسبت سود به زیان را ثبت کرده‌اند.',
+          ],
+          performanceLeaks: [
+            'معاملات سریع زیر ۳ دقیقه با برآیند منفی و افت نرخ برد شناسایی شدند.',
+            'تخطی از قوانین چک‌لیست و ورود شتاب‌زده مهم‌ترین منبع نشت سود بوده است.',
+          ],
+          behavioralTendencies: [
+            'ثبت آرامش روحی در ورود معامله با سودآوری مستمر همبستگی مستقیم دارد.',
+            'پایبندی بدون تغییر به حد ضرر مانع از افت‌های شدید حساب شده است.',
+          ],
+          actionablePriorities: [
+            'توقف کامل معاملات اسکالپ زیر ۳ دقیقه بدون چک‌لیست',
+            'تمرکز حجم بر ستاپ‌های دارای تاییدیه چندگانه در سشن لندن',
+            'بازبینی هفتگی الگوهای اشتباه برای جلوگیری از تکرار',
+          ],
+          limitations: [
+            'این تحلیل صرفاً بر اساس نمونه معاملات ثبت‌شده است و جنبه توصیه مالی ندارد.',
+            'الگوهای با حجم نمونه کمتر از ۵ معامله باید صرفاً به عنوان فرضیه بررسی شوند.',
+          ],
+        } as unknown as T;
+      }
+
       const isPeriodic = prompt && (prompt.includes('گزارش') || prompt.includes('دوره') || prompt.includes('هفتگی') || prompt.includes('ماهانه') || prompt.includes('PERIODIC_REPORT'));
       if (isPeriodic) {
         return {
@@ -273,6 +301,26 @@ export class MockAIProvider implements AIProvider {
               'اولیت اول: تمرکز کامل بر روی پایبندی به حد ضرر در تمامی نمادها',
               'اولویت دوم: حذف پوزیشن‌های پرریسک در ساعات پایانی جمعه',
               'اولویت سوم: یادداشت منظم بازبینی پس از معامله بلافاصله پس از خروج',
+            ];
+          } else if (key === 'confirmedEdges') {
+            result[key] = [
+              'ستاپ شکست خط روند در سشن لندن با نرخ برد بالاتر از ۷۵٪ مزیت اصلی آماری است.',
+              'معاملات خرید روی جفت‌ارزهای اصلی با پایداری بالاتر همراه بوده‌اند.',
+            ];
+          } else if (key === 'performanceLeaks') {
+            result[key] = [
+              'معاملات با ماندگاری زیر ۳ دقیقه منشأ بیشترین زیان انباشته بوده‌اند.',
+              'تخطی از قوانین چک‌لیست سودآوری حساب را به شکل ملموسی کاهش داده است.',
+            ];
+          } else if (key === 'behavioralTendencies') {
+            result[key] = [
+              'حفظ خونسردی و ورود طبق پلن با ثبات سودآوری همبستگی مثبت دارد.',
+            ];
+          } else if (key === 'actionablePriorities') {
+            result[key] = [
+              'توقف معاملات سریع زیر ۳ دقیقه بدون چک‌لیست',
+              'تمرکز بر ستاپ‌های تاییدشده در سشن لندن',
+              'ثبت کامل یادداشت‌های روحی و ذهنی در ژورنال',
             ];
           } else if (key === 'limitations') {
             result[key] = [

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeServerAIQuery } from './server-orchestrator';
+import { executeServerAIQuery, executeServerPatternInsights } from './server-orchestrator';
 
 describe('Server AI Orchestrator Security & Authorization', () => {
   it('throws PERMISSION_DENIED when token is empty or missing', async () => {
@@ -7,6 +7,18 @@ describe('Server AI Orchestrator Security & Authorization', () => {
       executeServerAIQuery({
         token: '',
         question: 'عملکرد من چطور بوده؟',
+      })
+    ).rejects.toThrowError(
+      expect.objectContaining({
+        code: 'PERMISSION_DENIED',
+      })
+    );
+  });
+
+  it('rejects executeServerPatternInsights with empty token', async () => {
+    await expect(
+      executeServerPatternInsights({
+        token: '',
       })
     ).rejects.toThrowError(
       expect.objectContaining({

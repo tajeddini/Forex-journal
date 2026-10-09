@@ -12,6 +12,7 @@ import type {
   AITradeReviewResponse,
   AIAutoTagResponse,
   AIReportResponse,
+  AIPatternInsightsResponse,
 } from './types';
 import { AIError } from './types';
 import { getMockAIProvider } from './mock-provider';
@@ -22,6 +23,8 @@ import {
   executeAIAutoTagging,
   executeAIPeriodicReport,
 } from './analytics-service';
+import { executeAIPatternInsights } from './pattern-service';
+import type { PatternDetectionResult } from '../analytics/patterns';
 
 export interface UserAIProviderSettings {
   provider: AIProviderType;
@@ -342,6 +345,59 @@ export async function requestPeriodicReview(options: {
     const errBody = await response.json().catch(() => ({}));
     throw new AIError(
       errBody.error || `خطا در دریافت گزارش هوشمند دوره (${response.status})`,
+      errBody.code || 'PROVIDER_EXECUTION_ERROR'
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Request AI Pattern Insights for detected trading patterns
+ */
+export async function requestPatternInsights(options: {
+  detectionResult: PatternDetectionResult;
+  periodLabel?: string;
+  accountName?: string;
+  phaseName?: string;
+  isGuest?: boolean;
+  providerConfig?: UserAIProviderSettings;
+}): Promise<AIPatternInsightsResponse> {
+  const { detectionResult, periodLabel, accountName, phaseName, isGuest = false, providerConfig } = options;
+
+  if (isGuest || !isSupabaseConfigured) {
+    return executeAIPatternInsights({
+      detectionResult,
+      periodLabel,
+      accountName,
+      phaseName,
+    }, getMockAIProvider());
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new AIError('احراز هویت الزامی است', 'PERMISSION_DENIED');
+
+  const response = await fetch('/api/ai/query', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      action: 'pattern-insights',
+      detectionResult,
+      periodLabel,
+      accountName,
+      phaseName,
+      providerConfig: providerConfig || getSavedClientAIConfig(),
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    throw new AIError(
+      errBody.error || `خطا در دریافت بینش هوشمند الگوها (${response.status})`,
       errBody.code || 'PROVIDER_EXECUTION_ERROR'
     );
   }

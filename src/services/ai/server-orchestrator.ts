@@ -763,3 +763,97 @@ export async function executeServerPeriodicReview(request: {
     previousTrades,
   }, provider);
 }
+
+/**
+ * Server execution for Phase 15 Pattern Insights
+ */
+export async function executeServerPatternInsights(request: {
+  token: string;
+  detectionResult?: any;
+  periodLabel?: string;
+  accountName?: string;
+  phaseName?: string;
+  accountId?: string;
+  phaseId?: string;
+  providerConfig?: {
+    provider?: AIProviderType;
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  };
+}) {
+  const { token, detectionResult, periodLabel, accountName, phaseName, accountId, phaseId, providerConfig } = request;
+  if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
+
+  const supabase = createAuthenticatedSupabaseClient(token);
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData?.user) {
+    throw new AIError('احراز هویت کاربر ناموفق بود', 'PERMISSION_DENIED');
+  }
+  const userId = authData.user.id;
+
+  let patternResult = detectionResult;
+
+  if (!patternResult) {
+    let query = supabase.from('trades').select('*').eq('user_id', userId);
+    if (accountId) query = query.eq('account_id', accountId);
+    if (phaseId) query = query.eq('phase_id', phaseId);
+
+    const [tradesRes, journalsRes, stratsRes, setupsRes] = await Promise.all([
+      query,
+      supabase.from('trade_journals').select('*').eq('user_id', userId),
+      supabase.from('strategies').select('*').eq('user_id', userId),
+      supabase.from('setups').select('*').eq('user_id', userId),
+    ]);
+
+    const trades = (tradesRes.data as Trade[]) || [];
+    const journals = (journalsRes.data as TradeJournal[]) || [];
+    const strategies = (stratsRes.data as Strategy[]) || [];
+    const setups = (setupsRes.data as Setup[]) || [];
+
+    const journalMap = new Map<string, TradeJournal>();
+    for (const j of journals) journalMap.set(j.trade_id, j);
+    const stratMap = new Map<string, Strategy>();
+    for (const s of strategies) stratMap.set(s.id, s);
+    const setupMap = new Map<string, Setup>();
+    for (const s of setups) setupMap.set(s.id, s);
+
+    const { detectTradingPatterns } = await import('../analytics/patterns');
+    const contexts = trades.map(trade => {
+      const journal = journalMap.get(trade.id);
+      return {
+        trade,
+        journal,
+        strategy: journal?.strategy_id ? stratMap.get(journal.strategy_id) : null,
+        setup: journal?.setup_id ? setupMap.get(journal.setup_id) : null,
+      };
+    });
+
+    patternResult = detectTradingPatterns(contexts);
+  }
+
+  let provider: AIProvider;
+  if (providerConfig?.provider) {
+    if (providerConfig.provider === 'custom') await validateCustomProviderBaseUrl(providerConfig.baseUrl || '');
+    provider = createAIProviderInstance({
+      type: providerConfig.provider,
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
+    });
+    if (provider.type !== 'mock' && !provider.isAvailable()) {
+      throw new AIError(`کلید دسترسی برای ارائه‌دهنده '${provider.name}' نامعتبر یا ثبت نشده است.`, 'API_KEY_MISSING', provider.type);
+    }
+  } else {
+    provider = getAIProviderRegistry().getCurrentProvider();
+  }
+
+  const { executeAIPatternInsights } = await import('./pattern-service');
+  return executeAIPatternInsights({
+    detectionResult: patternResult,
+    periodLabel,
+    accountName,
+    phaseName,
+  }, provider);
+}
+

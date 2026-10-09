@@ -274,6 +274,15 @@ export interface AIReportResponse {
   limitations: string[];
 }
 
+export interface AIPatternInsightsResponse {
+  summary: string;
+  confirmedEdges: string[];
+  performanceLeaks: string[];
+  behavioralTendencies: string[];
+  actionablePriorities: string[]; // max 3 reflections/priorities
+  limitations: string[];
+}
+
 // --- Context Types ---
 
 export interface AIContext {

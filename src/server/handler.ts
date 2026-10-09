@@ -9,6 +9,7 @@ import {
   executeServerTradeReview,
   executeServerAutoTagging,
   executeServerPeriodicReview,
+  executeServerPatternInsights,
 } from '../services/ai/server-orchestrator';
 import { AIError } from '../services/ai/types';
 
@@ -116,6 +117,18 @@ export async function handleAIQueryRequest(req: any, res: any) {
         startDate,
         endDate,
         periodTitle,
+        accountId: accountId || undefined,
+        phaseId: phaseId || undefined,
+        providerConfig,
+      });
+    } else if (action === 'pattern-insights') {
+      const { detectionResult, periodLabel, accountName, phaseName } = body;
+      result = await executeServerPatternInsights({
+        token,
+        detectionResult,
+        periodLabel,
+        accountName,
+        phaseName,
         accountId: accountId || undefined,
         phaseId: phaseId || undefined,
         providerConfig,

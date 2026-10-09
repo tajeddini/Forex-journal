@@ -10,7 +10,7 @@ const port = parseInt(process.env.PORT || '3000', 10);
 app.use(express.json());
 
 // Mount API routes
-app.all('/api/ai/query', (req, res) => {
+app.all(['/api/ai/query', '/api/ai/pattern-insights', '/api/ai/patterns'], (req, res) => {
   return handleAIQueryRequest(req, res);
 });
 
