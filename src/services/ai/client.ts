@@ -360,10 +360,12 @@ export async function requestPatternInsights(options: {
   periodLabel?: string;
   accountName?: string;
   phaseName?: string;
+  accountId?: string;
+  phaseId?: string;
   isGuest?: boolean;
   providerConfig?: UserAIProviderSettings;
 }): Promise<AIPatternInsightsResponse> {
-  const { detectionResult, periodLabel, accountName, phaseName, isGuest = false, providerConfig } = options;
+  const { detectionResult, periodLabel, accountName, phaseName, accountId, phaseId, isGuest = false, providerConfig } = options;
 
   if (isGuest || !isSupabaseConfigured) {
     return executeAIPatternInsights({
@@ -390,6 +392,8 @@ export async function requestPatternInsights(options: {
       periodLabel,
       accountName,
       phaseName,
+      accountId,
+      phaseId,
       providerConfig: providerConfig || getSavedClientAIConfig(),
     }),
   });
