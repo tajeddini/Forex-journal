@@ -358,6 +358,7 @@ export async function requestPeriodicReview(options: {
 export async function requestPatternInsights(options: {
   detectionResult: PatternDetectionResult;
   periodLabel?: string;
+  dateRange?: 'all' | '30d' | '90d' | '180d';
   accountName?: string;
   phaseName?: string;
   accountId?: string;
@@ -365,7 +366,7 @@ export async function requestPatternInsights(options: {
   isGuest?: boolean;
   providerConfig?: UserAIProviderSettings;
 }): Promise<AIPatternInsightsResponse> {
-  const { detectionResult, periodLabel, accountName, phaseName, accountId, phaseId, isGuest = false, providerConfig } = options;
+  const { detectionResult, periodLabel, dateRange = 'all', accountName, phaseName, accountId, phaseId, isGuest = false, providerConfig } = options;
 
   if (isGuest || !isSupabaseConfigured) {
     return executeAIPatternInsights({
@@ -388,8 +389,8 @@ export async function requestPatternInsights(options: {
     },
     body: JSON.stringify({
       action: 'pattern-insights',
-      detectionResult,
       periodLabel,
+      dateRange,
       accountName,
       phaseName,
       accountId,

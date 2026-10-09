@@ -199,6 +199,7 @@ export default function PatternsPage() {
         accountId: selectedAccountId || undefined,
         phaseId: selectedPhaseId || undefined,
         periodLabel: dateLabel,
+        dateRange,
         isGuest,
       });
 
