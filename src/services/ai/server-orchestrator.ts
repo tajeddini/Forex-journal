@@ -770,6 +770,7 @@ export async function executeServerPeriodicReview(request: {
 export async function executeServerPatternInsights(request: {
   token: string;
   periodLabel?: string;
+  dateRange?: 'all' | '30d' | '90d' | '180d';
   accountName?: string;
   phaseName?: string;
   accountId?: string;
@@ -781,7 +782,7 @@ export async function executeServerPatternInsights(request: {
     baseUrl?: string;
   };
 }) {
-  const { token, periodLabel, accountName, phaseName, accountId, phaseId, providerConfig } = request;
+  const { token, periodLabel, dateRange = 'all', accountName, phaseName, accountId, phaseId, providerConfig } = request;
   if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
 
   const supabase = createAuthenticatedSupabaseClient(token);
@@ -798,6 +799,14 @@ export async function executeServerPatternInsights(request: {
     let query = supabase.from('trades').select('*').eq('user_id', userId);
     if (accountId) query = query.eq('account_id', accountId);
     if (phaseId) query = query.eq('phase_id', phaseId);
+
+    // The time window is selected from a strict allowlist, then calculated on the
+    // server. Never accept client-provided timestamps or use periodLabel as a filter.
+    if (dateRange !== 'all') {
+      const daysByRange = { '30d': 30, '90d': 90, '180d': 180 } as const;
+      const cutoff = new Date(Date.now() - daysByRange[dateRange] * 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('entry_datetime', cutoff);
+    }
 
     const [tradesRes, journalsRes, stratsRes, setupsRes] = await Promise.all([
       query,
