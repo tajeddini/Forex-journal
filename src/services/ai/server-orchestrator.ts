@@ -783,6 +783,8 @@ export async function executeServerPatternInsights(request: {
   };
 }) {
   const { token, periodLabel, dateRange = 'all', accountName, phaseName, accountId, phaseId, providerConfig } = request;
+  const selectedDateRange: 'all' | '30d' | '90d' | '180d' =
+    dateRange === '30d' || dateRange === '90d' || dateRange === '180d' ? dateRange : 'all';
   if (!token) throw new AIError('توکن احراز هویت الزامی است', 'PERMISSION_DENIED');
 
   const supabase = createAuthenticatedSupabaseClient(token);
@@ -802,9 +804,9 @@ export async function executeServerPatternInsights(request: {
 
     // The time window is selected from a strict allowlist, then calculated on the
     // server. Never accept client-provided timestamps or use periodLabel as a filter.
-    if (dateRange !== 'all') {
+    if (selectedDateRange !== 'all') {
       const daysByRange = { '30d': 30, '90d': 90, '180d': 180 } as const;
-      const cutoff = new Date(Date.now() - daysByRange[dateRange] * 24 * 60 * 60 * 1000).toISOString();
+      const cutoff = new Date(Date.now() - daysByRange[selectedDateRange] * 24 * 60 * 60 * 1000).toISOString();
       query = query.gte('entry_datetime', cutoff);
     }
 
