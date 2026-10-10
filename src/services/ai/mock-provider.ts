@@ -3,7 +3,7 @@
 // For development and testing without external API
 // ============================================================
 
-import type { AIProvider, AIResponse, AIGenerateOptions, AICapabilities, AISchemaDefinition } from './types';
+import type { AIProvider, AIResponse, AIGenerateOptions, AICapabilities, AISchemaDefinition } from './types.js';
 
 export class MockAIProvider implements AIProvider {
   readonly name = 'Mock AI Provider';
