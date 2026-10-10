@@ -9,6 +9,20 @@ const port = parseInt(process.env.PORT || '3000', 10);
 
 app.use(express.json());
 
+// Apply baseline security headers for non-Vercel/self-hosted deployments too.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Only advertise HTTPS-only transport in production deployments.
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+
+  next();
+});
+
 // Mount API routes
 app.all(['/api/ai/query', '/api/ai/pattern-insights', '/api/ai/patterns'], (req, res) => {
   return handleAIQueryRequest(req, res);
