@@ -5,12 +5,12 @@
 // Production (explicit error, no silent mock fallback).
 // ============================================================
 
-import type { AIProvider, AIProviderConfig, AIProviderType, AIProviderState } from './types';
-import { AIError } from './types';
-import { getMockAIProvider } from './mock-provider';
-import { GeminiAIProvider } from './gemini-provider';
-import { OpenAICompatibleProvider } from './openai-provider';
-import { ClaudeAIProvider } from './claude-provider';
+import type { AIProvider, AIProviderConfig, AIProviderType, AIProviderState } from './types.js';
+import { AIError } from './types.js';
+import { getMockAIProvider } from './mock-provider.js';
+import { GeminiAIProvider } from './gemini-provider.js';
+import { OpenAICompatibleProvider } from './openai-provider.js';
+import { ClaudeAIProvider } from './claude-provider.js';
 
 export function createAIProviderInstance(config: AIProviderConfig): AIProvider {
   if (config.type === 'gemini') {
