@@ -1,7 +1,7 @@
 // Server-side validation for user-supplied Custom OpenAI-compatible provider URLs.
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { AIError } from './types';
+import { AIError } from './types.js';
 function isPrivateIPv4(ip: string): boolean { const p=ip.split('.').map(Number); if(p.length!==4||p.some(n=>!Number.isInteger(n)||n<0||n>255)) return true; const [a,b]=p; return a===0||a===10||a===127||(a===100&&b>=64&&b<=127)||(a===169&&b===254)||(a===172&&b>=16&&b<=31)||(a===192&&(b===0||b===168))||(a===198&&(b===18||b===19))||a>=224; }
 function isPrivateIPv6(ip: string): boolean { const n=ip.toLowerCase(); return n==='::'||n==='::1'||n.startsWith('fc')||n.startsWith('fd')||n.startsWith('fe8')||n.startsWith('fe9')||n.startsWith('fea')||n.startsWith('feb')||n.startsWith('ff'); }
 function isUnsafeAddress(ip: string): boolean { const v=isIP(ip); if(v===4) return isPrivateIPv4(ip); if(v===6){ const normalized=ip.toLowerCase(); const mapped=normalized.match(/^::ffff:(.+)$/); if(mapped) return isUnsafeAddress(mapped[1]); return isPrivateIPv6(ip); } return true; }
