@@ -10,8 +10,8 @@ import {
   executeServerAutoTagging,
   executeServerPeriodicReview,
   executeServerPatternInsights,
-} from '../services/ai/server-orchestrator';
-import { AIError } from '../services/ai/types';
+} from '../services/ai/server-orchestrator.js';
+import { AIError } from '../services/ai/types.js';
 
 function applySecureCors(req: any, res: any): boolean {
   const origin = req.headers?.origin || req.headers?.Origin || '';
