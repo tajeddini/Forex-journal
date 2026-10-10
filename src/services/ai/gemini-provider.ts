@@ -12,8 +12,8 @@ import type {
   AIResponse,
   AICapabilities,
   AISchemaDefinition,
-} from './types';
-import { AIError } from './types';
+} from './types.js';
+import { AIError } from './types.js';
 
 export class GeminiAIProvider implements AIProvider {
   readonly name = 'Google Gemini';
