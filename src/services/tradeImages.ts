@@ -14,15 +14,14 @@ import { v4 as uuidv4 } from 'uuid';
 
 /** Convert a processed image blob to a data URL for the browser-only guest demo. */
 async function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') resolve(reader.result);
-      else reject(new Error('خطا در آماده‌سازی تصویر نمایشی'));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('خطا در خواندن تصویر نمایشی'));
-    reader.readAsDataURL(blob);
-  });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  // Chunk the conversion to avoid argument limits on larger screenshots.
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  const base64 = btoa(binary);
+  return `data:${blob.type || 'application/octet-stream'};base64,${base64}`;
 }
 
 /**
