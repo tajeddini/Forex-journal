@@ -143,14 +143,14 @@ export default function TradeDetailPage() {
   }, [user]);
 
   const fetchImages = useCallback(async () => {
-    if (!tradeId) return;
+    if (!tradeId || !user) return;
     try {
-      const imgs = await getTradeImages(tradeId);
+      const imgs = await getTradeImages(tradeId, user.id);
       setImages(imgs);
     } catch {
       setImages([]);
     }
-  }, [tradeId]);
+  }, [tradeId, user]);
 
   useEffect(() => {
     fetchTrade();
