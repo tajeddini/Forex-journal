@@ -11,7 +11,7 @@ import {
   getZonedPersianDayOfWeek,
   getZonedDateStr,
   DEFAULT_TIMEZONE,
-} from '../../utils/timezone';
+} from '../../utils/timezone.js';
 
 const PERSIAN_DAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
 
