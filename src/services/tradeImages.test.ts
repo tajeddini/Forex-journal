@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { uploadTradeImage } from './tradeImages';
+import { getTradeImageUrl, uploadTradeImage } from './tradeImages';
 
 vi.mock('../utils/imageProcessing', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/imageProcessing')>();
@@ -41,5 +41,9 @@ describe('Trade Images Service Consistency & Security', () => {
     expect(result.id).toBeDefined();
     expect(result.user_id).toBe('guest-demo-user');
     expect(result.storage_path).toContain('trades/trade-guest-1/');
+
+    const previewUrl = await getTradeImageUrl(result);
+    expect(previewUrl).toMatch(/^data:image\/webp;base64,/);
+    expect(previewUrl).toBe((result as typeof result & { preview_url?: string }).preview_url);
   });
 });
