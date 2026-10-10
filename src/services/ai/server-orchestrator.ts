@@ -7,20 +7,20 @@
 // ============================================================
 
 import { createClient } from '@supabase/supabase-js';
-import type { AIQueryPlan, AIQueryResponse, AIProviderType, AIProvider } from './types';
-import { AIError } from './types';
-import { planAIQuery } from './query-planner';
-import { buildAIContext } from './context-builder';
-import { classifyTrades, calculateCoreMetrics } from '../analytics/metrics';
-import { analyzeByHour, analyzeByDay } from '../analytics/timeAnalytics';
+import type { AIQueryPlan, AIQueryResponse, AIProviderType, AIProvider } from './types.js';
+import { AIError } from './types.js';
+import { planAIQuery } from './query-planner.js';
+import { buildAIContext } from './context-builder.js';
+import { classifyTrades, calculateCoreMetrics } from '../analytics/metrics.js';
+import { analyzeByHour, analyzeByDay } from '../analytics/timeAnalytics.js';
 import {
   calculatePerformanceBreakdown,
   calculateDurationMetrics,
   aggregateByTime,
-} from '../analytics/aggregation';
-import { analyzeByRuleAdherence } from '../analytics/psychologyAnalytics';
-import { getAIProviderRegistry, createAIProviderInstance } from './provider-registry';
-import { validateCustomProviderBaseUrl } from './custom-provider-security';
+} from '../analytics/aggregation.js';
+import { analyzeByRuleAdherence } from '../analytics/psychologyAnalytics.js';
+import { getAIProviderRegistry, createAIProviderInstance } from './provider-registry.js';
+import { validateCustomProviderBaseUrl } from './custom-provider-security.js';
 import type {
   Trade,
   TradingAccount,
@@ -30,7 +30,7 @@ import type {
   Setup,
   Tag,
   Mistake,
-} from '../../types/database';
+} from '../../types/database.js';
 
 export interface AIQueryExecutionRequest {
   token: string;
@@ -589,7 +589,7 @@ export async function executeServerTradeReview(request: {
     provider = getAIProviderRegistry().getCurrentProvider();
   }
 
-  const { executeAITradeReview } = await import('./analytics-service');
+  const { executeAITradeReview } = await import('./analytics-service.js');
   return executeAITradeReview({
     trade,
     journal,
@@ -658,7 +658,7 @@ export async function executeServerAutoTagging(request: {
     provider = getAIProviderRegistry().getCurrentProvider();
   }
 
-  const { executeAIAutoTagging } = await import('./analytics-service');
+  const { executeAIAutoTagging } = await import('./analytics-service.js');
   return executeAIAutoTagging({
     trade,
     journal: journalRes.data || null,
@@ -752,7 +752,7 @@ export async function executeServerPeriodicReview(request: {
     provider = getAIProviderRegistry().getCurrentProvider();
   }
 
-  const { executeAIPeriodicReport } = await import('./analytics-service');
+  const { executeAIPeriodicReport } = await import('./analytics-service.js');
   return executeAIPeriodicReport({
     periodType,
     periodTitle: periodTitle || `${periodType === 'weekly' ? 'هفته' : 'ماه'} انتخابی`,
@@ -796,7 +796,7 @@ export async function executeServerPatternInsights(request: {
 
   // Never trust client-supplied detectionResult: it can be forged. Recompute from
   // authenticated user's database rows on the server for every AI insight request.
-  let patternResult: import('../analytics/patterns').PatternDetectionResult;
+  let patternResult: import('../analytics/patterns.js').PatternDetectionResult;
   {
     let query = supabase.from('trades').select('*').eq('user_id', userId);
     if (accountId) query = query.eq('account_id', accountId);
@@ -829,7 +829,7 @@ export async function executeServerPatternInsights(request: {
     const setupMap = new Map<string, Setup>();
     for (const s of setups) setupMap.set(s.id, s);
 
-    const { detectTradingPatterns } = await import('../analytics/patterns');
+    const { detectTradingPatterns } = await import('../analytics/patterns.js');
     const contexts = trades.map(trade => {
       const journal = journalMap.get(trade.id);
       return {
@@ -859,7 +859,7 @@ export async function executeServerPatternInsights(request: {
     provider = getAIProviderRegistry().getCurrentProvider();
   }
 
-  const { executeAIPatternInsights } = await import('./pattern-service');
+  const { executeAIPatternInsights } = await import('./pattern-service.js');
   return executeAIPatternInsights({
     detectionResult: patternResult,
     periodLabel,
