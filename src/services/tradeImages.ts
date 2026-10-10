@@ -12,6 +12,19 @@ import { processImage, validateImageFile } from '../utils/imageProcessing';
 import type { TradeImage, TradeImageInsert } from '../types/database';
 import { v4 as uuidv4 } from 'uuid';
 
+/** Convert a processed image blob to a data URL for the browser-only guest demo. */
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('خطا در آماده‌سازی تصویر نمایشی'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('خطا در خواندن تصویر نمایشی'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * Upload a trade image with rollback on DB failure
  */
@@ -47,8 +60,12 @@ export async function uploadTradeImage(
   };
 
   if (!isSupabaseConfigured || userId === 'guest-demo-user') {
-    const localImage: TradeImage = {
+    // Keep the processed preview in mock storage so guest screenshots still render
+    // after navigation/reload without requesting a signed URL for a non-existent cloud object.
+    const previewUrl = await blobToDataUrl(processed.blob);
+    const localImage: TradeImage & { preview_url: string } = {
       ...insertData,
+      preview_url: previewUrl,
       id: `img-${Date.now()}`,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -128,6 +145,9 @@ export async function getTradeImages(tradeId: string, userId?: string): Promise<
  * Get signed URL for an image
  */
 export async function getTradeImageUrl(image: TradeImage): Promise<string> {
+  const previewUrl = (image as TradeImage & { preview_url?: string }).preview_url;
+  if (previewUrl?.startsWith('data:image/')) return previewUrl;
+
   const provider = getSupabaseStorageProvider();
   try {
     const url = await provider.getSignedUrl(image.storage_path);
