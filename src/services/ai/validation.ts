@@ -3,7 +3,7 @@
 // Validates AI-generated query plans before execution
 // ============================================================
 
-import type { AIQueryPlan, AIMetric, AIDimension, AIFilter, AIValidationResult } from './types';
+import type { AIQueryPlan, AIMetric, AIDimension, AIFilter, AIValidationResult } from './types.js';
 
 // Allowlisted metrics
 const ALLOWED_METRICS: Set<AIMetric> = new Set([
