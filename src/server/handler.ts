@@ -122,12 +122,13 @@ export async function handleAIQueryRequest(req: any, res: any) {
         providerConfig,
       });
     } else if (action === 'pattern-insights') {
-      const { periodLabel, accountName, phaseName } = body;
+      const { periodLabel, accountName, phaseName, dateRange } = body;
       result = await executeServerPatternInsights({
         token,
         periodLabel,
         accountName,
         phaseName,
+        dateRange,
         accountId: accountId || undefined,
         phaseId: phaseId || undefined,
         providerConfig,
