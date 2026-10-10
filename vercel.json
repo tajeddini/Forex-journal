@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/ai/query.ts": {
+      "includeFiles": "src/**/*.ts"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
