@@ -4,10 +4,10 @@
 // Uses allowlists and prompt injection filtering
 // ============================================================
 
-import type { AIQueryPlan, AIMetric, AIDimension, AIFilter } from './types';
-import { validateQueryPlan, sanitizeUserInput, detectPromptInjection } from './validation';
-import type { AIProvider } from './types';
-import { AIError } from './types';
+import type { AIQueryPlan, AIMetric, AIDimension, AIFilter } from './types.js';
+import { validateQueryPlan, sanitizeUserInput, detectPromptInjection } from './validation.js';
+import type { AIProvider } from './types.js';
+import { AIError } from './types.js';
 
 export interface QueryPlannerResult {
   plan: AIQueryPlan;
