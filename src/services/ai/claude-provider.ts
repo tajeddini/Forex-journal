@@ -1,5 +1,5 @@
-import type { AIProvider, AIProviderConfig, AIGenerateOptions, AIResponse, AICapabilities, AISchemaDefinition } from './types';
-import { AIError } from './types';
+import type { AIProvider, AIProviderConfig, AIGenerateOptions, AIResponse, AICapabilities, AISchemaDefinition } from './types.js';
+import { AIError } from './types.js';
 
 export class ClaudeAIProvider implements AIProvider {
   readonly name = 'Anthropic Claude';
