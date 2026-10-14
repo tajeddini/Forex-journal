@@ -6,6 +6,8 @@ export function getAuthErrorMessage(message: string): string {
     'User already registered': 'این ایمیل قبلاً ثبت شده است',
     'Password should be at least 6 characters': 'رمز عبور باید حداقل ۶ کاراکتر باشد',
     'Too many requests': 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً بعداً تلاش کنید',
+    'email rate limit exceeded': 'به‌دلیل محدودیت ارسال ایمیل، فعلاً امکان ارسال ایمیل تأیید وجود ندارد. کمی بعد دوباره تلاش کنید',
+    'over_email_send_rate_limit': 'به‌دلیل محدودیت ارسال ایمیل، فعلاً امکان ارسال ایمیل تأیید وجود ندارد. کمی بعد دوباره تلاش کنید',
     'Network request failed': 'خطا در اتصال به سرور. لطفاً اتصال اینترنت خود را بررسی کنید',
   };
   return errorMap[message] || 'خطای ناشناخته. لطفاً دوباره تلاش کنید';
