@@ -30,6 +30,8 @@ describe('getAuthErrorMessage', () => {
   it('explains Supabase email send rate limits', () => {
     expect(getAuthErrorMessage('email rate limit exceeded')).toContain('محدودیت ارسال ایمیل');
     expect(getAuthErrorMessage('over_email_send_rate_limit')).toContain('محدودیت ارسال ایمیل');
+    expect(getAuthErrorMessage('Email rate limit exceeded')).toContain('محدودیت ارسال ایمیل');
+    expect(getAuthErrorMessage('AuthApiError: Email rate limit exceeded')).toContain('محدودیت ارسال ایمیل');
   });
 
   it('returns Persian message for network failure', () => {
