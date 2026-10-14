@@ -10,5 +10,10 @@ export function getAuthErrorMessage(message: string): string {
     'over_email_send_rate_limit': 'به‌دلیل محدودیت ارسال ایمیل، فعلاً امکان ارسال ایمیل تأیید وجود ندارد. کمی بعد دوباره تلاش کنید',
     'Network request failed': 'خطا در اتصال به سرور. لطفاً اتصال اینترنت خود را بررسی کنید',
   };
-  return errorMap[message] || 'خطای ناشناخته. لطفاً دوباره تلاش کنید';
+  const normalizedMessage = message.trim().toLowerCase();
+  const matchingEntry = Object.entries(errorMap).find(([key]) =>
+    normalizedMessage === key.toLowerCase() || normalizedMessage.includes(key.toLowerCase())
+  );
+
+  return matchingEntry?.[1] || 'خطای ناشناخته. لطفاً دوباره تلاش کنید';
 }
