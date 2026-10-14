@@ -23,10 +23,11 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Sync optional platform packages in lockfile
+        run: npm install --package-lock-only --no-audit --no-fund
+
       - name: Install dependencies
-        # npm ci currently rejects the lockfile's missing optional platform packages
-        # (Tailwind/Rolldown native bindings); npm install resolves them consistently.
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
