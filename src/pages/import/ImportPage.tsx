@@ -222,6 +222,15 @@ export default function ImportPage() {
     }
   }, [state.account, state.normalizedTrades, user, toast]);
 
+  // Re-run duplicate detection whenever the preview is ready or its trade set changes.
+  // Without this effect the duplicate checker existed but was never invoked, so every
+  // preview incorrectly displayed zero duplicates.
+  useEffect(() => {
+    if (state.step === 'preview' && state.account && user) {
+      void checkForDuplicates();
+    }
+  }, [state.step, state.account, state.normalizedTrades, user, checkForDuplicates]);
+
   // Import trades
   const handleImport = useCallback(async () => {
     if (!state.account || !user || !state.file) return;
