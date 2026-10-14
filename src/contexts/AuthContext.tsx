@@ -187,6 +187,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
+        // Return email confirmation to the same origin that initiated signup,
+        // instead of Supabase's possibly stale per-deployment Site URL.
+        emailRedirectTo: window.location.origin,
         data: { display_name: displayName },
       },
     });
