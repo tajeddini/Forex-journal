@@ -8,6 +8,8 @@ export function getAuthErrorMessage(message: string): string {
     'Too many requests': 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً بعداً تلاش کنید',
     'email rate limit exceeded': 'به‌دلیل محدودیت ارسال ایمیل، فعلاً امکان ارسال ایمیل تأیید وجود ندارد. کمی بعد دوباره تلاش کنید',
     'over_email_send_rate_limit': 'به‌دلیل محدودیت ارسال ایمیل، فعلاً امکان ارسال ایمیل تأیید وجود ندارد. کمی بعد دوباره تلاش کنید',
+    'Email address is invalid': 'آدرس ایمیل معتبر نیست. لطفاً ایمیل دیگری وارد کنید',
+    'email_address_invalid': 'آدرس ایمیل معتبر نیست. لطفاً ایمیل دیگری وارد کنید',
     'Network request failed': 'خطا در اتصال به سرور. لطفاً اتصال اینترنت خود را بررسی کنید',
   };
   const normalizedMessage = message.trim().toLowerCase();
