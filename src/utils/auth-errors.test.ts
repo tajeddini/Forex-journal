@@ -34,6 +34,11 @@ describe('getAuthErrorMessage', () => {
     expect(getAuthErrorMessage('AuthApiError: Email rate limit exceeded')).toContain('محدودیت ارسال ایمیل');
   });
 
+  it('explains invalid email addresses', () => {
+    expect(getAuthErrorMessage('Email address is invalid')).toContain('آدرس ایمیل معتبر نیست');
+    expect(getAuthErrorMessage('email_address_invalid')).toContain('آدرس ایمیل معتبر نیست');
+  });
+
   it('returns Persian message for network failure', () => {
     const result = getAuthErrorMessage('Network request failed');
     expect(result).toBe('خطا در اتصال به سرور. لطفاً اتصال اینترنت خود را بررسی کنید');
