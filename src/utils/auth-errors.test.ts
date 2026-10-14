@@ -27,6 +27,11 @@ describe('getAuthErrorMessage', () => {
     expect(result).toBe('تعداد درخواست‌ها بیش از حد مجاز است. لطفاً بعداً تلاش کنید');
   });
 
+  it('explains Supabase email send rate limits', () => {
+    expect(getAuthErrorMessage('email rate limit exceeded')).toContain('محدودیت ارسال ایمیل');
+    expect(getAuthErrorMessage('over_email_send_rate_limit')).toContain('محدودیت ارسال ایمیل');
+  });
+
   it('returns Persian message for network failure', () => {
     const result = getAuthErrorMessage('Network request failed');
     expect(result).toBe('خطا در اتصال به سرور. لطفاً اتصال اینترنت خود را بررسی کنید');
