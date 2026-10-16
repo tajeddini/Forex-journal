@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getTradeImageUrl, uploadTradeImage } from './tradeImages';
+import type { TradeImage } from '../types/database';
 
 vi.mock('../utils/imageProcessing', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/imageProcessing')>();
@@ -14,6 +15,12 @@ vi.mock('../utils/imageProcessing', async (importOriginal) => {
     })),
   };
 });
+
+vi.mock('./storage/supabaseProvider', () => ({
+  getSupabaseStorageProvider: () => ({
+    getSignedUrl: vi.fn().mockRejectedValue(new Error('Storage unavailable')),
+  }),
+}));
 
 describe('Trade Images Service Consistency & Security', () => {
   it('rejects invalid non-image file uploads immediately before calling storage', async () => {
@@ -46,4 +53,12 @@ describe('Trade Images Service Consistency & Security', () => {
     expect(previewUrl).toMatch(/^data:image\/webp;base64,/);
     expect(previewUrl).toBe((result as typeof result & { preview_url?: string }).preview_url);
   });
+  it('surfaces signed URL failures instead of returning a non-URL storage path', async () => {
+    const image = {
+      storage_path: 'trades/trade-1/screenshot.webp',
+    } as TradeImage;
+
+    await expect(getTradeImageUrl(image)).rejects.toThrow('Storage unavailable');
+  });
+
 });
