@@ -148,12 +148,11 @@ export async function getTradeImageUrl(image: TradeImage): Promise<string> {
   if (previewUrl?.startsWith('data:image/')) return previewUrl;
 
   const provider = getSupabaseStorageProvider();
-  try {
-    const url = await provider.getSignedUrl(image.storage_path);
-    return url || image.storage_path;
-  } catch {
-    return image.storage_path;
+  const url = await provider.getSignedUrl(image.storage_path);
+  if (!url) {
+    throw new Error('لینک امن تصویر از فضای ابری دریافت نشد');
   }
+  return url;
 }
 
 /**
